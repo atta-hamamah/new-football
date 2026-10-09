@@ -63,6 +63,12 @@ export interface Duel {
   sx: number;
   sy: number;
   tick: number;
+  /** Shot power 0..1 (from how long SHOOT was held). 1 = fireball. */
+  power: number;
+  /** Ticks the ball takes to reach the goal (faster shots = fewer). */
+  ticks: number;
+  /** Ticks a human keeper has to choose a dive. */
+  window: number;
   /** Keeper's choice: undefined = not yet decided, null = stayed. */
   dive: Zone | null | undefined;
   keeperHuman: boolean;
@@ -81,6 +87,17 @@ export interface Input {
 }
 
 export const SPRINT_AT = 0.95;
+
+/** Seconds of holding SHOOT for a full-power shot. */
+export const CHARGE_TIME = 0.9;
+/** Power of a quick tap. */
+export const MIN_SHOT_POWER = 0.3;
+/** At or above this power the ball is a fireball. */
+export const FIREBALL = 0.98;
+
+export function chargeToPower(seconds: number): number {
+  return MIN_SHOT_POWER + (1 - MIN_SHOT_POWER) * Math.min(1, seconds / CHARGE_TIME);
+}
 
 export const NO_INPUT: Input = { mx: 0, my: 0, pass: false, shoot: false, dive: -1 };
 

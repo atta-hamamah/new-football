@@ -39,57 +39,62 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
     ),
   );
   const again = () => showMatchMenu(stage, back);
+  const go = (fn: () => void) => () => {
+    sfx.unlock();
+    sfx.click();
+    fn();
+  };
   showScreen(
     h(
       'div',
       { class: 'menu match-menu' },
       h('div', { class: 'map-head' }, h('button', { class: 'icon-btn', onclick: back }, '←'), h('h2', {}, '6v6 MATCH'), h('span', {})),
-      h('p', { class: 'tagline' }, 'Pass, sprint, tackle. Every shot is a duel with the keeper.'),
       h(
         'div',
-        { class: 'col' },
-        h('div', { class: 'section' }, h('div', { class: 'section-title' }, '🤖 VS COMPUTER'), h('div', { class: 'chips' }, ...chips)),
+        { class: 'split' },
         h(
-          'button',
-          {
-            class: 'btn big',
-            id: 'play-cpu',
-            onclick: () => {
-              sfx.unlock();
-              sfx.click();
-              playSession(stage, new LocalSession(difficulty), again);
-            },
-          },
-          'Kick off',
-        ),
-        h('div', { class: 'section-title spaced' }, '📶 WI-FI WITH FRIENDS'),
-        h(
-          'button',
-          {
-            class: 'btn big alt',
-            id: 'host-wifi',
-            onclick: () => {
-              sfx.unlock();
-              sfx.click();
-              void import('../net/lobby').then((m) => m.hostLobby(stage, again));
-            },
-          },
-          'Host a game',
+          'div',
+          {},
+          h(
+            'div',
+            { class: 'col' },
+            h('div', { class: 'section-title' }, '🤖 VS COMPUTER'),
+            h('div', { class: 'chips' }, ...chips),
+            h(
+              'button',
+              { class: 'btn big', id: 'play-cpu', onclick: go(() => playSession(stage, new LocalSession(difficulty), again)) },
+              'Kick off',
+            ),
+          ),
         ),
         h(
-          'button',
-          {
-            class: 'btn big ghost',
-            id: 'join-wifi',
-            onclick: () => {
-              sfx.unlock();
-              sfx.click();
-              void import('../net/lobby').then((m) => m.joinLobby(stage, again));
-            },
-          },
-          'Join a game',
+          'div',
+          {},
+          h(
+            'div',
+            { class: 'col' },
+            h('div', { class: 'section-title' }, '📶 WI-FI WITH FRIENDS'),
+            h(
+              'button',
+              {
+                class: 'btn big alt',
+                id: 'host-wifi',
+                onclick: go(() => void import('../net/lobby').then((m) => m.hostLobby(stage, again))),
+              },
+              'Host a game',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn big ghost',
+                id: 'join-wifi',
+                onclick: go(() => void import('../net/lobby').then((m) => m.joinLobby(stage, again))),
+              },
+              'Join a game',
+            ),
+            h('p', { class: 'muted small' }, 'Everyone must be on the same Wi-Fi network.'),
+          ),
         ),
-        h('p', { class: 'muted small' }, 'Everyone must be on the same Wi-Fi network.'),
       ),
       h(
         'div',
@@ -98,13 +103,9 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
         h(
           'p',
           {},
-          'Left thumb: move (push to the edge to sprint). PASS: no direction = nearest, direction = that way, pushed to the edge = longest. SHOOT: direction picks the corner, pushed to the edge shoots high.',
+          'Left thumb moves (push past the edge to sprint, you can’t turn while sprinting). PASS: tap. SHOOT: hold to power up, release to shoot. Full power = 🔥 fireball. Push the stick up / down while shooting to aim at the top / bottom post, leave it centred for the middle, push it to the edge to shoot high.',
         ),
-        h(
-          'p',
-          {},
-          'Outside the box the keeper must guess the side; inside the box, side and height; in the six-yard box it always goes in. When they shoot at you: swipe to dive!',
-        ),
+        h('p', {}, 'When they shoot at you: push the stick toward the ball and tap a button to dive.'),
       ),
     ),
   );

@@ -37,6 +37,13 @@ describe('shot areas and rules', () => {
     expect(resolveDuel('impossible', { col: 0, row: 0 }, { col: 0, row: 0 })).toBe('goal');
   });
 
+  it('shot power: weak shots from range are saved, a full-power fireball beats the middle rule', () => {
+    expect(resolveDuel('long', { col: 1, row: 0 }, { col: -1, row: 0 }, 0.35)).toBe('saved');
+    expect(resolveDuel('long', { col: 0, row: 0 }, { col: 1, row: 0 }, 0.9)).toBe('saved');
+    expect(resolveDuel('long', { col: 0, row: 0 }, { col: 1, row: 0 }, 1)).toBe('goal');
+    expect(resolveDuel('long', { col: 0, row: 0 }, { col: 0, row: 0 }, 1)).toBe('saved');
+  });
+
   it('cannot shoot from your own half', () => {
     const sim = new MatchSim(cfg);
     place(sim, 3, 0, -8);
@@ -108,6 +115,72 @@ describe('human control', () => {
     for (let i = 0; i < 20; i++) sim.step(new Map([[0, { ...NO_INPUT, mx: 0, my: 1 }]]));
     expect(me.fx).toBeCloseTo(1, 5);
     expect(Math.abs(me.vy)).toBeLessThan(0.5);
+  });
+});
+
+describe('charged shots', () => {
+  function ready() {
+    const sim = new MatchSim(cfg);
+    sim.addHuman(0, 0, 'you');
+    for (let i = 0; i < 70; i++) sim.step(new Map([[0, NO_INPUT]]));
+    const me = sim.humans.get(0)!.controlled;
+    place(sim, me, 2, 12); // opponent half, outside the box
+    for (const p of sim.players) if (p.team === 1 && p.role) Object.assign(p, { x: 18, y: -20 });
+    giveBall(sim, me);
+    return sim;
+  }
+  const hold = (sim: MatchSim, ticks: number, inp: Partial<Input>) => {
+    for (let t = 0; t < ticks; t++) sim.step(new Map([[0, { ...NO_INPUT, shoot: true, ...inp }]]));
+    sim.step(new Map([[0, { ...NO_INPUT, ...inp, shoot: false }]]));
+  };
+
+  it('a tap is a weak shot, holding charges to full power (fireball)', () => {
+    const tap = ready();
+    hold(tap, 1, {});
+    expect(tap.state).toBe('duel');
+    expect(tap.duel!.power).toBeLessThan(0.35);
+
+    const full = ready();
+    expect(full.chargeOf(full.humans.get(0)!.controlled)).toBe(-1);
+    hold(full, 60, {});
+    expect(full.duel!.power).toBe(1);
+    // Harder shots reach the goal sooner and leave the keeper less time.
+    expect(full.duel!.ticks).toBeLessThan(tap.duel!.ticks);
+    expect(full.duel!.window).toBeLessThan(tap.duel!.window);
+  });
+
+  it('the held stick picks the side; pushed to the edge goes high', () => {
+    const sim = ready();
+    hold(sim, 20, { mx: -0.7, my: 0.2 });
+    expect(sim.duel!.zone).toEqual({ col: -1, row: 0 });
+    const high = ready();
+    hold(high, 20, { mx: 1, my: 0 });
+    expect(high.duel!.zone).toEqual({ col: 1, row: 1 });
+  });
+
+  it('shows the charge while holding', () => {
+    const sim = ready();
+    const me = sim.humans.get(0)!.controlled;
+    for (let t = 0; t < 27; t++) sim.step(new Map([[0, { ...NO_INPUT, shoot: true }]]));
+    expect(sim.chargeOf(me)).toBeGreaterThan(0.4);
+    expect(sim.chargeOf(me)).toBeLessThan(0.6);
+  });
+});
+
+describe('human keeper dives with the stick', () => {
+  it('when time runs out, the keeper dives where the stick points', () => {
+    const sim = new MatchSim(cfg);
+    sim.addHuman(0, 0, 'keeper side');
+    sim.state = 'play';
+    // Opponent shoots at team 0's goal.
+    const shooter = 11;
+    place(sim, shooter, 0, -12);
+    giveBall(sim, shooter);
+    expect(sim.shoot(shooter, 1, false, 0.8)).toBe(true);
+    expect(sim.duel!.keeperHuman).toBe(true);
+    while ((sim.state as string) === 'duel') sim.step(new Map([[0, { ...NO_INPUT, mx: 0.8, my: 0 }]]));
+    expect(sim.duel!.dive).toEqual({ col: 1, row: 0 });
+    expect(sim.duel!.outcome).toBe('saved');
   });
 });
 

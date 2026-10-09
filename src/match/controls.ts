@@ -1,11 +1,24 @@
-// Touch controls: a floating joystick (left half), PASS and SHOOT buttons (right),
-// and swipe-to-dive while you are defending a shot. Keyboard works on desktop too.
+// Landscape touch controls.
+// Left half: floating joystick (push past the rim to sprint, direction locks while sprinting).
+// Right side: PASS and SHOOT. Hold SHOOT to charge; the stick picks where the shot goes.
+// Defending a shot: push the stick toward the ball and tap a button to dive.
 
 import { haptic } from '../ui/audio';
 import { h } from '../ui/dom';
 import { type Input, SPRINT_AT } from './types';
 
-const STICK_R = 62;
+const STICK_R = 64;
+
+const ICON_PASS =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_SHOOT =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.5l3.2 2.3-1.2 3.8h-4l-1.2-3.8z" fill="currentColor"/></svg>';
+
+function iconButton(cls: string, icon: string, label: string): HTMLButtonElement {
+  const b = h('button', { class: `act ${cls}` });
+  b.innerHTML = `<span class="act-ring"></span><span class="act-face">${icon}<span class="act-label">${label}</span></span>`;
+  return b;
+}
 
 export class Controls {
   readonly el: HTMLElement;
@@ -23,32 +36,48 @@ export class Controls {
   private shoot = false;
   private dive = -1;
   private diving = false;
-  private swipe: { id: number; x: number; y: number } | null = null;
 
-  /** `flip` = 1 if this player attacks up the screen in pitch +y, -1 if the view is rotated. */
+  /** `flip` = 1 for the team attacking pitch +y (shown to the right), -1 for the other team. */
   constructor(private readonly flip: number) {
     this.base = h('div', { class: 'stick-base hidden' });
     this.knob = h('div', { class: 'stick-knob' });
     this.base.appendChild(this.knob);
-    this.passBtn = h('button', { class: 'act pass' }, 'PASS');
-    this.shootBtn = h('button', { class: 'act shoot' }, 'SHOOT');
+    this.passBtn = iconButton('pass', ICON_PASS, 'PASS');
+    this.shootBtn = iconButton('shoot', ICON_SHOOT, 'SHOOT');
     this.diveHint = h(
       'div',
       { class: 'dive-hint hidden' },
       h('div', { class: 'dive-title' }, 'SAVE IT!'),
-      h('div', {}, 'Swipe ← ↑ → to dive'),
+      h('div', { class: 'dive-sub' }, 'Push the stick toward the ball · tap to dive'),
+      h('div', { class: 'dive-bar' }, h('span', {})),
     );
     const zone = h('div', { class: 'stick-zone' });
-    this.el = h('div', { class: 'controls' }, zone, this.base, h('div', { class: 'buttons' }, this.passBtn, this.shootBtn), this.diveHint);
+    const hint = h('div', { class: 'stick-hint' }, 'MOVE');
+    this.el = h(
+      'div',
+      { class: 'controls' },
+      zone,
+      hint,
+      this.base,
+      h('div', { class: 'buttons' }, this.passBtn, this.shootBtn),
+      this.diveHint,
+    );
 
-    zone.addEventListener('pointerdown', (e) => this.onDown(e));
+    zone.addEventListener('pointerdown', (e) => {
+      hint.remove();
+      this.onDown(e);
+    });
     this.el.addEventListener('pointermove', (e) => this.onMove(e));
     this.el.addEventListener('pointerup', (e) => this.onUp(e));
     this.el.addEventListener('pointercancel', (e) => this.onUp(e));
     const hold = (btn: HTMLButtonElement, set: (v: boolean) => void) => {
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        if (this.diving) return this.onDown(e);
+        btn.setPointerCapture?.(e.pointerId);
+        if (this.diving) {
+          this.commitDive();
+          return;
+        }
         set(true);
         btn.classList.add('down');
         haptic(8);
@@ -58,7 +87,6 @@ export class Controls {
         btn.classList.remove('down');
       };
       btn.addEventListener('pointerup', up);
-      btn.addEventListener('pointerleave', up);
       btn.addEventListener('pointercancel', up);
     };
     hold(this.passBtn, (v) => (this.pass = v));
@@ -73,21 +101,28 @@ export class Controls {
     this.el.remove();
   }
 
-  /** Shows the dive prompt while the opponent's shot is in the air. */
-  setDiving(on: boolean): void {
+  /** Shows the dive prompt while the opponent's shot is in the air. `secondsLeft` animates the bar. */
+  setDiving(on: boolean, secondsLeft = 0.5): void {
     if (on === this.diving) return;
     this.diving = on;
     this.diveHint.classList.toggle('hidden', !on);
     this.el.classList.toggle('diving', on);
-    if (!on) this.dive = -1;
+    if (on) {
+      const bar = this.diveHint.querySelector('.dive-bar span') as HTMLElement;
+      bar.style.animation = 'none';
+      void bar.offsetWidth;
+      bar.style.animation = `drain ${Math.max(0.2, secondsLeft)}s linear forwards`;
+    } else this.dive = -1;
+  }
+
+  /** Fills the ring on the SHOOT button (0..1), or hides it (-1). */
+  setCharge(c: number): void {
+    this.shootBtn.style.setProperty('--charge', String(Math.max(0, c)));
+    this.shootBtn.classList.toggle('charging', c >= 0);
+    this.shootBtn.classList.toggle('full', c >= 0.999);
   }
 
   private onDown(e: PointerEvent): void {
-    if (this.diving) {
-      this.swipe = { id: e.pointerId, x: e.clientX, y: e.clientY };
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-      return;
-    }
     if (this.stickId !== null) return;
     this.stickId = e.pointerId;
     this.stickOrigin = { x: e.clientX, y: e.clientY };
@@ -99,17 +134,11 @@ export class Controls {
   }
 
   private onMove(e: PointerEvent): void {
-    if (this.swipe && e.pointerId === this.swipe.id) {
-      const dx = e.clientX - this.swipe.x;
-      const dy = e.clientY - this.swipe.y;
-      if (dx * dx + dy * dy > 40 * 40) this.finishSwipe(dx, dy);
-      return;
-    }
     if (e.pointerId !== this.stickId) return;
     const dx = e.clientX - this.stickOrigin.x;
     const dy = e.clientY - this.stickOrigin.y;
     const d = Math.hypot(dx, dy);
-    // Past the rim = over-extended (sprint / far pass / high shot).
+    // Past the rim = over-extended (sprint / longest pass / high shot).
     const over = d > STICK_R * 1.05;
     const mag = over ? 1 : Math.min(SPRINT_AT - 0.01, d / STICK_R);
     this.stick = d > 4 ? { x: (dx / d) * mag, y: (dy / d) * mag } : { x: 0, y: 0 };
@@ -119,10 +148,6 @@ export class Controls {
   }
 
   private onUp(e: PointerEvent): void {
-    if (this.swipe && e.pointerId === this.swipe.id) {
-      this.finishSwipe(e.clientX - this.swipe.x, e.clientY - this.swipe.y);
-      return;
-    }
     if (e.pointerId !== this.stickId) return;
     this.stickId = null;
     this.stick = { x: 0, y: 0 };
@@ -130,31 +155,22 @@ export class Controls {
     this.base.classList.remove('over');
   }
 
-  private finishSwipe(dx: number, dy: number): void {
-    this.swipe = null;
+  /** Dive where the stick points: up/down = side, centred = stay, pushed to the edge = high. */
+  private commitDive(): void {
     if (!this.diving || this.dive >= 0) return;
-    const len = Math.hypot(dx, dy);
-    if (len < 20) {
-      this.dive = 6; // stay
-      return;
+    const inp = this.read();
+    const mag = Math.hypot(inp.mx, inp.my);
+    if (mag < 0.3) this.dive = 6;
+    else {
+      const col = inp.mx > 0.35 ? 1 : inp.mx < -0.35 ? -1 : 0;
+      this.dive = (mag >= SPRINT_AT ? 3 : 0) + col + 1;
     }
-    const colScreen = dx > 0.4 * len ? 1 : dx < -0.4 * len ? -1 : 0;
-    const row = dy < -0.35 * len ? 1 : 0;
-    this.dive = row * 3 + colScreen * this.flip + 1;
     haptic(20);
   }
 
   private readonly onKey = (e: KeyboardEvent) => {
     this.keys.add(e.key.toLowerCase());
-    if (this.diving && this.dive < 0) {
-      const map: Record<string, number> = { q: 3, w: 4, e: 5, a: 0, s: 1, d: 2 };
-      const k = e.key.toLowerCase();
-      if (k in map) {
-        const z = map[k];
-        const col = (z % 3) - 1;
-        this.dive = Math.floor(z / 3) * 3 + col * this.flip + 1;
-      }
-    }
+    if (this.diving && (e.key === ' ' || e.key.toLowerCase() === 'j' || e.key.toLowerCase() === 'k')) this.commitDive();
   };
 
   private readonly onKeyUp = (e: KeyboardEvent) => {
@@ -166,22 +182,21 @@ export class Controls {
     let sx = this.stick.x;
     let sy = this.stick.y;
     const k = this.keys;
-    if (!this.diving) {
-      const kx = (k.has('arrowright') || k.has('d') ? 1 : 0) - (k.has('arrowleft') || k.has('a') ? 1 : 0);
-      const ky = (k.has('arrowdown') || k.has('s') ? 1 : 0) - (k.has('arrowup') || k.has('w') ? 1 : 0);
-      if (kx || ky) {
-        const l = Math.hypot(kx, ky);
-        const mag = k.has('shift') ? 1 : 0.8;
-        sx = (kx / l) * mag;
-        sy = (ky / l) * mag;
-      }
+    const kx = (k.has('arrowright') || k.has('d') ? 1 : 0) - (k.has('arrowleft') || k.has('a') ? 1 : 0);
+    const ky = (k.has('arrowdown') || k.has('s') ? 1 : 0) - (k.has('arrowup') || k.has('w') ? 1 : 0);
+    if (kx || ky) {
+      const l = Math.hypot(kx, ky);
+      const mag = k.has('shift') ? 1 : 0.8;
+      sx = (kx / l) * mag;
+      sy = (ky / l) * mag;
     }
     return {
-      // Screen right/up -> pitch +x/+y for team 0; mirrored for team 1.
-      mx: sx * this.flip,
-      my: -sy * this.flip,
-      pass: this.pass || k.has(' ') || k.has('j'),
-      shoot: this.shoot || k.has('k'),
+      // Landscape: screen right = towards the goal you attack (pitch +y for team 0),
+      // screen down = pitch +x. Mirrored for the other team.
+      mx: sy * this.flip,
+      my: sx * this.flip,
+      pass: !this.diving && (this.pass || (k.has(' ') && !this.diving) || k.has('j')),
+      shoot: !this.diving && (this.shoot || k.has('k')),
       dive: this.dive,
     };
   }

@@ -125,19 +125,31 @@ export async function hostLobby(stage: Stage, back: () => void): Promise<void> {
           'div',
           { class: 'menu lobby' },
           h('div', { class: 'map-head' }, h('button', { class: 'icon-btn', onclick: leave }, '✕'), h('h2', {}, 'YOUR GAME'), h('span', {})),
-          h('p', { class: 'tagline' }, `Friends on this Wi-Fi tap “Join a game” and pick “${name}”.`),
-          teamColumns(host.players, 0, (p) => host.setTeam(p.slot, p.team === 0 ? 1 : 0)),
           h(
             'div',
-            { class: 'col' },
-            h('div', { class: 'chips' }, ...chips),
+            { class: 'split' },
             h(
-              'button',
-              { class: 'btn big', id: 'start-match', onclick: () => startMatch() },
-              `Start match (${host.players.length} player${host.players.length > 1 ? 's' : ''})`,
+              'div',
+              {},
+              teamColumns(host.players, 0, (p) => host.setTeam(p.slot, p.team === 0 ? 1 : 0)),
+            ),
+            h(
+              'div',
+              {},
+              h('p', { class: 'tagline' }, `Friends on this Wi-Fi tap “Join a game” and pick “${name}”.`),
+              h(
+                'div',
+                { class: 'col' },
+                h('div', { class: 'chips' }, ...chips),
+                h(
+                  'button',
+                  { class: 'btn big', id: 'start-match', onclick: () => startMatch() },
+                  `Start match (${host.players.length} player${host.players.length > 1 ? 's' : ''})`,
+                ),
+              ),
+              h('p', { class: 'muted small' }, 'Empty spots are filled by computer players.'),
             ),
           ),
-          h('p', { class: 'muted small' }, 'Empty spots are filled by computer players.'),
         ),
       );
     };
@@ -216,17 +228,25 @@ export async function joinLobby(stage: Stage, back: () => void): Promise<void> {
               h('h2', {}, client.hostName ? `${client.hostName.toUpperCase()}'S GAME` : 'LOBBY'),
               h('span', {}),
             ),
-            teamColumns(client.players, client.mySlot, null),
             h(
               'div',
-              { class: 'col' },
+              { class: 'split' },
+              h('div', {}, teamColumns(client.players, client.mySlot, null)),
               h(
-                'button',
-                { class: 'btn big ghost', id: 'switch-team', onclick: () => client.setTeam(client.myTeam === 0 ? 1 : 0) },
-                'Switch team',
+                'div',
+                {},
+                h(
+                  'div',
+                  { class: 'col' },
+                  h(
+                    'button',
+                    { class: 'btn big ghost', id: 'switch-team', onclick: () => client.setTeam(client.myTeam === 0 ? 1 : 0) },
+                    'Switch team',
+                  ),
+                ),
+                h('p', { class: 'muted waiting' }, 'Waiting for the host to start…'),
               ),
             ),
-            h('p', { class: 'muted waiting' }, 'Waiting for the host to start…'),
           ),
         );
       };

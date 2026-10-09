@@ -168,6 +168,18 @@ export class Sfx {
     this.burst(0.18, 'bandpass', 1200, 0.2, 0.01, 400);
   }
 
+  /** Shot fully charged. */
+  chargeFull(): void {
+    this.tone(660, 0.12, 'triangle', 0.18);
+    this.tone(990, 0.2, 'triangle', 0.14, 0.05);
+  }
+
+  /** Full-power fireball shot. */
+  fireball(): void {
+    this.burst(0.7, 'lowpass', 1800, 0.55, 0.01, 300);
+    this.tone(90, 0.4, 'sawtooth', 0.12, 0, 40);
+  }
+
   click(): void {
     this.tone(900, 0.05, 'sine', 0.12);
   }

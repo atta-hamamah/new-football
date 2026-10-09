@@ -3,8 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 interface MatchHook {
   view: { state: string; clock: number; score: number[]; players: { x: number; y: number; human: number; team: number }[] } | null;
 }
-// Software-rendered CI browsers are slow at phone resolutions; a 1x screen keeps two "phones" smooth.
-test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+// Landscape phones. Software-rendered CI browsers are slow at high resolutions, so 1x pixels.
+test.use({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 
 const view = (page: Page) => page.evaluate(() => (window as unknown as { __match: MatchHook | null }).__match?.view ?? null);
 
@@ -20,10 +20,10 @@ test('vs computer: kick off, move, pass, clock runs', async ({ page }) => {
   await expect(page.locator('.mboard')).toBeVisible();
   await expect.poll(async () => (await view(page))?.state, { timeout: 5000 }).toBe('play');
   const before = (await view(page))!;
-  // Keyboard: run up the pitch, then pass.
-  await page.keyboard.down('w');
+  // Keyboard: run towards the goal (to the right), then pass.
+  await page.keyboard.down('d');
   await page.waitForTimeout(800);
-  await page.keyboard.up('w');
+  await page.keyboard.up('d');
   await page.keyboard.press('j');
   await page.waitForTimeout(600);
   const after = (await view(page))!;
@@ -34,7 +34,7 @@ test('vs computer: kick off, move, pass, clock runs', async ({ page }) => {
 });
 
 test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({ browser }) => {
-  const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true };
+  const phone = { viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true };
   const hostPage = await (await browser.newContext(phone)).newPage();
   const joinPage = await (await browser.newContext(phone)).newPage();
 
@@ -58,13 +58,13 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
   await expect(joinPage.locator('.mboard')).toBeVisible({ timeout: 5000 });
   await expect.poll(async () => (await view(joinPage))?.state, { timeout: 8000 }).toBe('play');
 
-  // Sam (red, attacks down the pitch) holds "right" on his screen.
+  // Sam (red) holds "right" on his screen: towards the goal red attacks.
   await expect.poll(async () => (await view(hostPage))?.state, { timeout: 8000 }).toBe('play');
   // Control can switch to the teammate nearest the ball, so follow whoever Sam controls.
   const samNow = async () => {
     const v = (await view(hostPage))!;
     const i = v.players.findIndex((p) => p.human === 1);
-    return { i, x: v.players[i].x, team: v.players[i].team, state: v.state };
+    return { i, y: v.players[i].y, team: v.players[i].team, state: v.state };
   };
   expect((await samNow()).team).toBe(1);
   await joinPage.keyboard.down('d');
@@ -73,11 +73,11 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
   for (let k = 0; k < 10; k++) {
     await hostPage.waitForTimeout(250);
     const cur = await samNow();
-    if (cur.i === prev.i && cur.state === 'play') moved += cur.x - prev.x;
+    if (cur.i === prev.i && cur.state === 'play') moved += cur.y - prev.y;
     prev = cur;
   }
   await joinPage.keyboard.up('d');
-  // Red's view is rotated, so screen-right is pitch -x.
+  // Everyone attacks to the right of their own screen: for red that is pitch -y.
   expect(moved).toBeLessThan(-2);
 
   // Both screens agree on the match.

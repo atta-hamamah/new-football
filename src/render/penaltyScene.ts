@@ -10,7 +10,7 @@ import { VIEW_W } from './app';
 import { KeeperFigure, ShooterFigure } from './figures';
 import { CAM_H, FOCAL, GOAL_SCALE, GOAL_Z, HORIZON, project, SPOT_Z } from './projection';
 
-const NET_Z = 17;
+const NET_Z = GOAL_Z + 2;
 const NET_TOP = 2.2;
 const SHOOTER_S = 200;
 /** Stylised: the taker is drawn smaller than life so he never hides the goal. */
@@ -98,30 +98,30 @@ export class PenaltyScene implements Scene {
 
   private buildBackground(): void {
     const sky = new Graphics();
-    sky.rect(-600, -800, VIEW_W + 1200, 1300).fill(0x060a18);
+    sky.rect(-600, -800, VIEW_W + 1200, 1100).fill(0x060a18);
     this.world.addChild(sky);
 
     // Floodlight glow.
     const glow = new Graphics();
-    glow.circle(40, 100, 160).fill({ color: 0xbfd9ff, alpha: 0.35 });
-    glow.circle(VIEW_W - 40, 100, 160).fill({ color: 0xbfd9ff, alpha: 0.35 });
+    glow.circle(60, 10, 180).fill({ color: 0xbfd9ff, alpha: 0.35 });
+    glow.circle(VIEW_W - 60, 10, 180).fill({ color: 0xbfd9ff, alpha: 0.35 });
     glow.filters = [new BlurFilter({ strength: 40, quality: 4 })];
     glow.blendMode = 'add';
 
     // Stands with crowd.
     const st = new Graphics();
-    st.rect(-600, 170, VIEW_W + 1200, 320).fill(0x0d1430);
+    st.rect(-600, -40, VIEW_W + 1200, 330).fill(0x0d1430);
     for (let row = 0; row < 9; row++) {
-      const y = 195 + row * 30;
+      const y = -20 + row * 34;
       st.rect(-600, y, VIEW_W + 1200, 2).fill({ color: 0x18224a, alpha: 0.8 });
     }
     const palette = [0xffffff, 0xe63946, 0x3a86ff, 0xffbe0b, 0x06d6a0, 0xff006e];
     let seed = 7;
     const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < 1400; i++) {
+    for (let i = 0; i < 2200; i++) {
       const x = -300 + rand() * (VIEW_W + 600);
-      const y = 185 + rand() * 300;
-      const far = (y - 180) / 300;
+      const y = -30 + rand() * 310;
+      const far = (y + 30) / 310;
       st.circle(x, y, 1.4 + far * 2.2).fill({ color: palette[Math.floor(rand() * palette.length)], alpha: 0.25 + rand() * 0.45 });
     }
     this.stands.addChild(st);
@@ -129,19 +129,19 @@ export class PenaltyScene implements Scene {
 
     // LED advertising boards.
     const boards = new Graphics();
-    const by0 = project(0, 1, 25).y;
-    const by1 = project(0, 0, 25).y;
+    const by0 = project(0, 1, GOAL_Z + 10).y;
+    const by1 = project(0, 0, GOAL_Z + 10).y;
     boards.rect(-600, by0, VIEW_W + 1200, by1 - by0).fill(0x0a0f22);
     const segColors = [0x3a86ff, 0xff006e, 0x06d6a0, 0xffbe0b];
-    for (let i = 0; i < 14; i++) {
-      const x = -280 + i * 100;
+    for (let i = 0; i < 20; i++) {
+      const x = -320 + i * 100;
       boards.roundRect(x + 4, by0 + 6, 90, by1 - by0 - 12, 4).fill({ color: segColors[i % 4], alpha: 0.55 });
     }
     this.world.addChild(boards);
 
     // Pitch with mowing stripes.
     const pitch = new Graphics();
-    const zs = [30, 26, 22, 19, 17, 15, 13, 11, 9.5, 8, 6.8, 5.8, 5, 4.3, 3.7, 3.2, 2.8, 2.4, 2, 1.6];
+    const zs = [36, 31, 27, 24, 21, 19, 17, 15, 13.3, 11.8, 10.4, 9.2, 8.1, 7.1, 6.2, 5.4, 4.7, 4.1, 3.6, 3.1];
     pitch.rect(-600, by1, VIEW_W + 1200, 2000).fill(0x1b6b34);
     for (let i = 0; i < zs.length - 1; i++) {
       const y0 = Math.max(by1, project(0, 0, zs[i]).y);
@@ -158,7 +158,7 @@ export class PenaltyScene implements Scene {
     const spot = project(0, 0, SPOT_Z);
     pitch.ellipse(spot.x, spot.y, spot.s * 0.12, spot.s * 0.04).fill({ color: 0xffffff, alpha: 0.9 });
     // Vignette at the bottom so the HUD reads well.
-    pitch.rect(-600, 1180, VIEW_W + 1200, 600).fill({ color: 0x000000, alpha: 0.25 });
+    pitch.rect(-600, 700, VIEW_W + 1200, 600).fill({ color: 0x000000, alpha: 0.25 });
     this.world.addChild(pitch);
   }
 
@@ -361,8 +361,8 @@ export class PenaltyScene implements Scene {
     const sh = new ShooterFigure(SHOOTER_S, color, number);
     this.shooter = sh;
     this.world.addChildAt(sh.root, this.world.getChildIndex(this.ballShadow));
-    const from = { x: -2.3, z: 2.6 };
-    const to = { x: -0.85, z: SPOT_Z - 0.3 };
+    const from = { x: -3.2, z: SPOT_Z - 1.6 };
+    const to = { x: -0.9, z: SPOT_Z - 0.3 };
     await this.tween(
       dur,
       (k) => {

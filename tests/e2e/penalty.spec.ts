@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// Software-rendered CI browsers are slow at phone resolutions; a 1x screen keeps it smooth.
-test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+// Landscape phone. Software-rendered CI browsers are slow at high resolutions, so 1x pixels.
+test.use({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 
 const phase = (page: Page) =>
   page.evaluate(() => (window as unknown as { __game: { penalty: { phase: string } | null } }).__game.penalty?.phase);

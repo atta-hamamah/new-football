@@ -23,13 +23,14 @@ import {
   type ShotArea,
   SPRINT_AT,
   type Team,
+  CHARGE_TIME,
+  chargeToPower,
+  FIREBALL,
 } from './types';
 
 export const WALK = 6.2;
 export const SPRINT = 8.4;
 export const DRIBBLE_MULT = 0.9;
-export const DUEL_TICKS = 48;
-export const KEEP_WINDOW = 30;
 const PICKUP = 1.15;
 const TACKLE = 1.2;
 
@@ -47,6 +48,8 @@ export interface Human {
   name: string;
   controlled: number;
   prev: Input;
+  /** Seconds SHOOT has been held while on the ball, or -1 when not charging. */
+  charge: number;
 }
 
 /** Formation in team coordinates (attacking +y). Index = role. */
@@ -116,7 +119,7 @@ export class MatchSim {
   // --- humans ------------------------------------------------------------------------------
 
   addHuman(slot: number, team: Team, name: string): void {
-    this.humans.set(slot, { slot, team, name, controlled: -1, prev: NO_INPUT });
+    this.humans.set(slot, { slot, team, name, controlled: -1, prev: NO_INPUT, charge: -1 });
     this.assignControl(true);
   }
 
@@ -269,7 +272,7 @@ export class MatchSim {
   }
 
   /** Starts a shot. Returns false if the player is too far (own half). */
-  shoot(i: number, col: -1 | 0 | 1, high: boolean): boolean {
+  shoot(i: number, col: -1 | 0 | 1, high: boolean, power = 0.7): boolean {
     const p = this.players[i];
     const area = shotArea(p.team, p.x, p.y);
     if (area === 'own') return false;
@@ -277,6 +280,10 @@ export class MatchSim {
     const tx = col * (GOAL_HALF - 0.55) + (this.rng.next() - 0.5) * 0.4;
     const ty = attackGoalY(p.team);
     const defending = (1 - p.team) as Team;
+    // Shown in slow motion: harder shots still arrive sooner and leave less time to react.
+    const speed = 12 + 18 * power;
+    const dist = Math.hypot(tx - this.ball.x, ty - this.ball.y);
+    const ticks = Math.round(Math.max(22, Math.min(75, (dist / speed) * 60 * 1.8)));
     this.duel = {
       shooter: i,
       team: p.team,
@@ -287,6 +294,9 @@ export class MatchSim {
       sx: this.ball.x,
       sy: this.ball.y,
       tick: 0,
+      power,
+      ticks,
+      window: Math.max(14, Math.round(ticks * 0.72)),
       dive: undefined,
       keeperHuman: this.teamHasHuman(defending),
       outcome: null,
@@ -296,7 +306,7 @@ export class MatchSim {
     this.ball.lastTouch = i;
     this.state = 'duel';
     this.stateT = 0;
-    this.emit({ type: 'kick', x: this.ball.x, y: this.ball.y, power: 26 });
+    this.emit({ type: 'kick', x: this.ball.x, y: this.ball.y, power: 14 + 16 * power });
     this.emit({ type: 'shot', by: i, area });
     return true;
   }
@@ -357,13 +367,22 @@ export class MatchSim {
       const shootPressed = inp.shoot && !h.prev.shoot;
       const i = h.controlled;
       if (i < 0) continue;
+      if (this.ball.owner !== i) h.charge = -1;
       if (this.ball.owner === i) {
-        if (passPressed) {
+        if (passPressed && h.charge < 0) {
           this.pass(i, inp.mx, inp.my);
           this.assignControl(true);
         } else if (shootPressed) {
+          // Hold SHOOT to charge: the longer, the harder.
+          h.charge = 0;
+        } else if (h.charge >= 0 && inp.shoot) {
+          h.charge += DT;
+        } else if (h.charge >= 0 && !inp.shoot) {
+          // Released: the held stick direction picks the side, pushed to the edge goes high.
           const col = inp.mx > 0.35 ? 1 : inp.mx < -0.35 ? -1 : 0;
-          if (!this.shoot(i, col, Math.hypot(inp.mx, inp.my) >= SPRINT_AT)) this.emit({ type: 'bounce' });
+          const power = chargeToPower(h.charge);
+          h.charge = -1;
+          if (!this.shoot(i, col, Math.hypot(inp.mx, inp.my) >= SPRINT_AT, power)) this.emit({ type: 'bounce' });
           if (this.state !== 'play') return;
         }
       } else if (passPressed) {
@@ -373,6 +392,14 @@ export class MatchSim {
         this.assignControl(true);
       }
     }
+  }
+
+  /** How charged a player's shot is (0..1), or -1 if they are not charging. */
+  chargeOf(i: number): number {
+    const p = this.players[i];
+    if (p.human < 0) return -1;
+    const h = this.humans.get(p.human);
+    return h && h.charge >= 0 ? Math.min(1, h.charge / CHARGE_TIME) : -1;
   }
 
   /** Alternates which team is processed first each tick, so neither side gets a systematic edge. */
@@ -602,12 +629,22 @@ export class MatchSim {
             break;
           }
         }
-      } else if (d.tick === 10) d.dive = this.aiDive(d);
-      if (d.dive === undefined && d.tick >= KEEP_WINDOW) d.dive = null;
+      } else if (d.tick === Math.max(6, Math.round(d.ticks * 0.3))) d.dive = this.aiDive(d);
+      if (d.dive === undefined && d.tick >= d.window) {
+        // Time's up: a human keeper dives where their stick is pointing (or stays if it's centred).
+        d.dive = null;
+        for (const h of this.humans.values()) {
+          if (h.team !== defending) continue;
+          const inp = inputs.get(h.slot) ?? NO_INPUT;
+          const mag = Math.hypot(inp.mx, inp.my);
+          if (mag > 0.3) d.dive = { col: inp.mx > 0.35 ? 1 : inp.mx < -0.35 ? -1 : 0, row: mag >= SPRINT_AT ? 1 : 0 };
+          break;
+        }
+      }
     }
 
     // Ball travels to the goal; players freeze (slow-motion moment).
-    const k = Math.min(1, d.tick / DUEL_TICKS);
+    const k = Math.min(1, d.tick / d.ticks);
     this.ball.x = d.sx + (d.tx - d.sx) * k;
     this.ball.y = d.sy + (d.ty - d.sy) * k;
     this.ball.z = (d.zone.row ? 2.0 : 0.4) * Math.sin(k * Math.PI * 0.5) * (d.zone.row ? 1 : 0.6);
@@ -617,8 +654,8 @@ export class MatchSim {
       keeper.y += (d.ty - Math.sign(d.ty) * 0.6 - keeper.y) * 0.25;
     }
 
-    if (d.tick >= DUEL_TICKS) {
-      d.outcome = resolveDuel(d.area, d.zone, d.dive ?? null);
+    if (d.tick >= d.ticks) {
+      d.outcome = resolveDuel(d.area, d.zone, d.dive ?? null, d.power);
       if (d.outcome === 'goal') this.goalScored(d.team, d.shooter);
       else {
         this.emit({ type: 'save', by: this.keeperOf(defending) });
@@ -637,7 +674,8 @@ export class MatchSim {
   /** Computer keeper guesses; harder difficulty reads shots better. */
   private aiDive(d: Duel): Zone {
     const base = d.area === 'long' ? 0.55 : d.area === 'danger' ? 0.5 : 0.3;
-    const pCol = base + (this.cfg.difficulty - 1) * 0.08;
+    // Harder shots are harder to read.
+    const pCol = base + (this.cfg.difficulty - 1) * 0.08 - (d.power - 0.6) * 0.3;
     const col = this.rng.chance(pCol)
       ? d.zone.col
       : (([-1, 0, 1] as const).filter((c) => c !== d.zone.col)[this.rng.int(0, 1)] as -1 | 0 | 1);
@@ -658,14 +696,19 @@ export class MatchSim {
 }
 
 /**
- * Shot rules (from the original design):
+ * Shot rules (from the original design, plus shot power):
  * - six-yard box ("impossible area"): always a goal;
  * - penalty box ("danger area"): keeper must match direction AND height;
- * - outside the box ("long area"): keeper must match direction; shots down the middle are always saved.
+ * - outside the box ("long area"): keeper must match direction; shots down the middle are
+ *   saved, and so are weak (barely charged) shots, unless it's a full-power fireball.
  */
-export function resolveDuel(area: ShotArea, zone: Zone, dive: Zone | null): 'goal' | 'saved' {
+export function resolveDuel(area: ShotArea, zone: Zone, dive: Zone | null, power = 0.7): 'goal' | 'saved' {
   if (area === 'impossible') return 'goal';
   const k: Zone = dive ?? { col: 0, row: 0 };
-  if (area === 'long') return zone.col === 0 || k.col === zone.col ? 'saved' : 'goal';
+  if (area === 'long') {
+    if (power < 0.45) return 'saved';
+    if (zone.col === 0 && power < FIREBALL) return 'saved';
+    return k.col === zone.col ? 'saved' : 'goal';
+  }
   return k.col === zone.col && k.row === zone.row ? 'saved' : 'goal';
 }

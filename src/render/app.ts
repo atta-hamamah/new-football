@@ -1,10 +1,13 @@
 // One PixiJS application for the whole game. Scenes draw in a fixed logical space
-// (portrait 720x1280) that is scaled to fit any screen.
+// (landscape 1280x720) that is scaled to fit any screen.
 
 import { Application, Container } from 'pixi.js';
+// Register text rendering before the renderer is created. The 6v6 code that uses Text is
+// loaded later (lazily), and a renderer only picks up render pipes that exist at creation.
+import 'pixi.js/text';
 
-export const VIEW_W = 720;
-export const VIEW_H = 1280;
+export const VIEW_W = 1280;
+export const VIEW_H = 720;
 
 export interface Scene {
   readonly root: Container;

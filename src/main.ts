@@ -38,56 +38,68 @@ export function showMenu(): void {
       'div',
       { class: 'menu' },
       h('div', { class: 'menu-top' }, soundButton()),
-      h('div', { class: 'logo' }, h('div', { class: 'logo-ball' }, '⚽'), h('h1', {}, 'SPOT', h('br'), 'KICK')),
-      h('p', { class: 'tagline' }, 'Read the keeper. Pick your corner. Win the cup.'),
       h(
         'div',
-        { class: 'col' },
+        { class: 'split' },
         h(
-          'button',
-          {
-            class: 'btn big',
-            id: 'play-run',
-            onclick: () => {
-              sfx.unlock();
-              sfx.click();
-              backdrop().start(false);
-            },
-          },
-          '🥅 Penalty Run',
+          'div',
+          {},
+          h('div', { class: 'logo' }, h('div', { class: 'logo-ball' }, '⚽'), h('h1', {}, 'SPOT', h('br'), 'KICK')),
+          h('p', { class: 'tagline' }, 'Read the keeper. Pick your corner. Win the cup.'),
         ),
         h(
-          'button',
-          {
-            class: 'btn big alt',
-            id: 'play-daily',
-            disabled: Boolean(d),
-            onclick: () => {
-              sfx.unlock();
-              sfx.click();
-              backdrop().start(true);
-            },
-          },
-          d ? `📅 Daily done · ${d.results.map((w) => (w ? '🟩' : '🟥')).join('')}` : '📅 Daily Run',
+          'div',
+          {},
+          h(
+            'div',
+            { class: 'col' },
+            h(
+              'button',
+              {
+                class: 'btn big',
+                id: 'play-run',
+                onclick: () => {
+                  sfx.unlock();
+                  sfx.click();
+                  backdrop().start(false);
+                },
+              },
+              '🥅 Penalty Run',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn big alt',
+                id: 'play-daily',
+                disabled: Boolean(d),
+                onclick: () => {
+                  sfx.unlock();
+                  sfx.click();
+                  backdrop().start(true);
+                },
+              },
+              d ? `📅 Daily done · ${d.results.map((w) => (w ? '🟩' : '🟥')).join('')}` : '📅 Daily Run',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn big ghost',
+                id: 'play-match',
+                onclick: () => {
+                  sfx.unlock();
+                  sfx.click();
+                  void import('./match/matchMenu').then((m) => m.showMatchMenu(stage, showMenu));
+                },
+              },
+              '⚽ 6v6 Match',
+            ),
+          ),
+          h(
+            'p',
+            { class: 'muted small stats' },
+            [best, save.titles ? `${save.titles} title${save.titles > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
+          ),
         ),
-        h(
-          'button',
-          {
-            class: 'btn big ghost',
-            id: 'play-match',
-            onclick: () => {
-              sfx.unlock();
-              sfx.click();
-              void import('./match/matchMenu').then((m) => m.showMatchMenu(stage, showMenu));
-            },
-          },
-          '⚽ 6v6 Match',
-        ),
-      ),
-      h(
-        'p',
-        { class: 'muted small stats' },
-        [best, save.titles ? `${save.titles} title${save.titles > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · '),
       ),
     ),
   );

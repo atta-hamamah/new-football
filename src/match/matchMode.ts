@@ -6,12 +6,12 @@ import { haptic, sfx } from '../ui/audio';
 import { banner, h, hex, root } from '../ui/dom';
 import { Controls } from './controls';
 import type { Session } from './session';
-import type { MatchEvent, Team } from './types';
+import { FIREBALL, type MatchEvent, type Team } from './types';
 import type { ViewState } from './view';
 
 export const KITS: [TeamKit, TeamKit] = [
-  { color: 0x3a86ff, keeper: 0xffbe0b },
-  { color: 0xe63946, keeper: 0x9b5de5 },
+  { color: 0x2f6bff, trim: 0xffffff, shorts: 0x0d1b4d, keeper: 0xffc21a },
+  { color: 0xe8364b, trim: 0x1a1a1a, shorts: 0xffffff, keeper: 0x7cff4f },
 ];
 
 export class MatchMode implements Scene {
@@ -19,6 +19,7 @@ export class MatchMode implements Scene {
   private readonly controls: Controls;
   private readonly hud: HTMLElement;
   private lastView: ViewState | null = null;
+  private lastCharge = -1;
   private endShown = false;
   private endPanel: HTMLElement | null = null;
 
@@ -46,7 +47,17 @@ export class MatchMode implements Scene {
       this.scene.view = view;
       for (const e of events) this.onEvent(e, view);
       const d = view.duel;
-      this.controls.setDiving(view.state === 'duel' && !!d && d.keeperHuman && d.team !== this.session.myTeam && d.dive === -2);
+      const defending = view.state === 'duel' && !!d && d.keeperHuman && d.team !== this.session.myTeam && d.dive === -2;
+      this.controls.setDiving(defending, d ? (d.window - d.tick) / 60 : 0);
+      // Charge ring on the SHOOT button follows my player's charge.
+      const mine = view.players.find((p) => p.human === this.session.mySlot);
+      const charge = mine ? mine.charge : -1;
+      this.controls.setCharge(charge);
+      if (charge >= 0.999 && this.lastCharge < 0.999) {
+        sfx.chargeFull();
+        haptic(25);
+      }
+      this.lastCharge = charge;
       this.renderHud(view);
       if (view.state === 'ended' && !this.endShown) this.showEnd(view);
       if (view.state !== 'ended' && this.endShown) this.hideEnd();
@@ -73,12 +84,18 @@ export class MatchMode implements Scene {
         break;
       case 'shot':
         this.scene.shake(4);
+        if (v.duel && v.duel.power >= FIREBALL) {
+          sfx.fireball();
+          this.scene.shake(8);
+        }
         break;
       case 'goal': {
         const ours = e.team === me;
         if (ours) sfx.goal();
         else sfx.miss();
         this.scene.burst(v.ball.x, v.ball.y, ours ? 0xc6ff00 : 0xff4d6d, 60);
+        this.scene.confetti(KITS[e.team].color);
+        this.scene.netRipple(e.team, v.ball.x);
         this.scene.shake(12);
         haptic(ours ? 40 : 15);
         void banner(ours ? 'GOAL!' : 'GOAL', ours ? 'good' : 'bad', `${v.score[0]} – ${v.score[1]}`, 1800);
@@ -99,23 +116,32 @@ export class MatchMode implements Scene {
   }
 
   private renderHud(v: ViewState): void {
-    const mm = Math.floor(Math.ceil(v.clock) / 60);
-    const ss = String(Math.ceil(v.clock) % 60).padStart(2, '0');
+    const secs = Math.ceil(v.clock);
+    const clock = v.state === 'ended' ? 'FT' : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     const me = this.session.myTeam;
-    const label = (t: Team) => (t === me ? 'YOU' : 'THEM');
-    const key = `${v.score[0]}-${v.score[1]}-${mm}:${ss}-${v.state}`;
+    // My team is always shown on the left (it attacks to the right).
+    const left = me;
+    const right = (1 - me) as Team;
+    const key = `${v.score[0]}-${v.score[1]}-${clock}-${v.state}`;
     if (this.hud.dataset.key === key) return;
     this.hud.dataset.key = key;
-    this.hud.replaceChildren(
-      h('button', { class: 'icon-btn', onclick: () => this.quit() }, '✕'),
+    const side = (t: Team, align: string) =>
       h(
         'div',
-        { class: 'mboard' },
-        h('span', { class: 'mteam', style: `--team:${hex(KITS[0].color)}` }, label(0)),
-        h('span', { class: 'mscore' }, `${v.score[0]} – ${v.score[1]}`),
-        h('span', { class: 'mteam', style: `--team:${hex(KITS[1].color)}` }, label(1)),
-        h('span', { class: 'mclock' }, v.state === 'ended' ? 'FT' : `${mm}:${ss}`),
+        { class: `mside ${align}`, style: `--team:${hex(KITS[t].color)}` },
+        h('span', { class: 'mbadge' }),
+        h('span', { class: 'mname' }, t === me ? 'YOU' : this.session.names.size > 1 ? 'AWAY' : 'CPU'),
+      );
+    this.hud.replaceChildren(
+      h('button', { class: 'icon-btn glass', onclick: () => this.quit() }, '✕'),
+      h(
+        'div',
+        { class: 'mboard glass' },
+        side(left, 'l'),
+        h('div', { class: 'mscore' }, h('span', {}, String(v.score[left])), h('i', {}, ''), h('span', {}, String(v.score[right]))),
+        side(right, 'r'),
       ),
+      h('div', { class: 'mclock glass' + (secs <= 10 && v.state !== 'ended' ? ' late' : '') }, clock),
     );
   }
 

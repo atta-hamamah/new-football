@@ -14,6 +14,8 @@ export interface PlayerView {
   /** Human slot controlling this player, -1 = computer. */
   human: number;
   sprinting: boolean;
+  /** Shot charge 0..1 while a human holds SHOOT, else -1. */
+  charge: number;
 }
 
 export interface DuelView {
@@ -26,6 +28,12 @@ export interface DuelView {
   dive: number;
   keeperHuman: boolean;
   outcome: 'goal' | 'saved' | null;
+  power: number;
+  ticks: number;
+  window: number;
+  /** Where the shot started (for drawing the ball's path). */
+  sx: number;
+  sy: number;
 }
 
 export interface ViewState {
@@ -48,7 +56,7 @@ export function viewFromSim(sim: MatchSim): ViewState {
     score: [sim.score[0], sim.score[1]],
     kickoffTeam: sim.kickoffTeam,
     ball: { x: sim.ball.x, y: sim.ball.y, z: sim.ball.z, owner: sim.ball.owner },
-    players: sim.players.map((p) => ({
+    players: sim.players.map((p, i) => ({
       x: p.x,
       y: p.y,
       fx: p.fx,
@@ -57,6 +65,7 @@ export function viewFromSim(sim: MatchSim): ViewState {
       role: p.role,
       human: p.human,
       sprinting: p.sprinting,
+      charge: sim.chargeOf(i),
     })),
     duel:
       d && (sim.state === 'duel' || sim.state === 'goal')
@@ -69,6 +78,11 @@ export function viewFromSim(sim: MatchSim): ViewState {
             dive: d.dive === undefined ? -2 : d.dive === null ? -1 : d.dive.row * 3 + d.dive.col + 1,
             keeperHuman: d.keeperHuman,
             outcome: d.outcome,
+            power: d.power,
+            ticks: d.ticks,
+            window: d.window,
+            sx: d.sx,
+            sy: d.sy,
           }
         : null,
   };
@@ -79,8 +93,8 @@ export function viewFromSim(sim: MatchSim): ViewState {
 const STATES: MatchState[] = ['kickoff', 'play', 'duel', 'goal', 'ended'];
 const AREAS: ShotArea[] = ['own', 'long', 'danger', 'impossible'];
 const OUTCOMES = [null, 'goal', 'saved'] as const;
-const HEADER = 20;
-const PER_PLAYER = 6;
+const HEADER = 25;
+const PER_PLAYER = 7;
 
 const EVENT_TYPES: MatchEvent['type'][] = ['kick', 'pass', 'steal', 'shot', 'goal', 'save', 'whistle', 'bounce'];
 
@@ -151,10 +165,15 @@ export function encodeSnapshot(v: ViewState, events: readonly MatchEvent[]): Flo
     d ? (d.keeperHuman ? 1 : 0) : 0,
     d ? OUTCOMES.indexOf(d.outcome) : 0,
     n,
+    d?.power ?? 0,
+    d?.ticks ?? 0,
+    d?.window ?? 0,
+    d?.sx ?? 0,
+    d?.sy ?? 0,
   ]);
   let o = HEADER;
   for (const p of v.players) {
-    out.set([p.x, p.y, p.fx, p.fy, p.team * 8 + p.role, (p.human + 1) * 2 + (p.sprinting ? 1 : 0)], o);
+    out.set([p.x, p.y, p.fx, p.fy, p.team * 8 + p.role, (p.human + 1) * 2 + (p.sprinting ? 1 : 0), p.charge], o);
     o += PER_PLAYER;
   }
   out[o++] = events.length;
@@ -185,6 +204,11 @@ export function decodeSnapshot(f: Float32Array): { view: ViewState; events: Matc
           dive: f[16],
           keeperHuman: f[17] === 1,
           outcome: OUTCOMES[f[18]],
+          power: f[20],
+          ticks: f[21],
+          window: f[22],
+          sx: f[23],
+          sy: f[24],
         }
       : null,
     players: [],
@@ -202,6 +226,7 @@ export function decodeSnapshot(f: Float32Array): { view: ViewState; events: Matc
       role: tr % 8,
       human: Math.floor(hs / 2) - 1,
       sprinting: hs % 2 === 1,
+      charge: f[o + 6],
     });
     o += PER_PLAYER;
   }

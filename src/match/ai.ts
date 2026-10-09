@@ -183,12 +183,12 @@ function carrierThink(sim: MatchSim, i: number): AiMove {
       return (team === 0 ? away : -away) as -1 | 0 | 1;
     };
     if (area === 'impossible' || area === 'danger') {
-      sim.shoot(i, pickCol(), sim.rng.chance(0.5));
+      sim.shoot(i, pickCol(), sim.rng.chance(0.5), 0.55 + sim.rng.next() * 0.45);
       return { vx: 0, vy: 0 };
     }
     const pass = bestPass(sim, i);
     if (area === 'long' && pt.y > HALF_L - 16 && Math.abs(pt.x) < 10 && near.d > 3 && sim.rng.chance(0.08)) {
-      sim.shoot(i, pickCol(), sim.rng.chance(0.4));
+      sim.shoot(i, pickCol(), sim.rng.chance(0.4), 0.7 + sim.rng.next() * 0.3);
       return { vx: 0, vy: 0 };
     }
     const pressured = near.d < 2.6;

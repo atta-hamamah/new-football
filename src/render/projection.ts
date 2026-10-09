@@ -3,11 +3,11 @@
 
 import { VIEW_W } from './app';
 
-export const FOCAL = 1229;
-export const HORIZON = 450;
+export const FOCAL = 1626;
+export const HORIZON = 240;
 export const CAM_H = 1.6;
-export const SPOT_Z = 4;
-export const GOAL_Z = 15;
+export const SPOT_Z = 6;
+export const GOAL_Z = 17;
 
 export interface Projected {
   x: number;

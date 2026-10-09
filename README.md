@@ -3,7 +3,7 @@
 Mobile football game with two modes:
 
 - **Penalty Run** (solo roguelike): 8 shootouts from Sunday League to The Final. Read each keeper's habits and body language, pick upgrades after every win, beat two boss keepers. There's also a **Daily Run**, the same seed for everyone, with a shareable result.
-- **6v6 Match**: arcade top-down football against the computer (Easy / Normal / Hard) or **with friends on the same Wi-Fi**. Every shot turns into a duel with the keeper: the defender swipes to dive.
+- **6v6 Match** (landscape): arcade top-down football against the computer (Easy / Normal / Hard) or **with friends on the same Wi-Fi**. Every shot turns into a duel with the keeper: the defender swipes to dive.
 
 Built with TypeScript + PixiJS, packaged for iPhone and Android with Capacitor.
 
@@ -30,13 +30,15 @@ npm run dev            # then open the game in two browsers / devices on the sam
 - Shooting: drag to move the aim, release to shoot. The aim wobbles more near the corners and the longer you hold.
 - Keeping: watch the run-up lean, then swipe left / right / up (or tap to stay) when the ball is struck. Keys: `Q W E / A S D`.
 
-**6v6**
+**6v6** (landscape: you always attack to the right)
 
 - Left thumb: floating joystick. Push past the rim to sprint (you can't turn while sprinting).
 - **PASS**: no direction → nearest teammate; direction → nearest that way; pushed to the edge → farthest that way. Without the ball, PASS switches player.
-- **SHOOT**: the direction picks the corner; pushed to the edge shoots high. You can't shoot from your own half.
-- Shot rules: outside the box the keeper must guess the side (shots down the middle are always saved). Inside the box he must guess side _and_ height. In the six-yard box it always goes in.
-- Keyboard: `WASD`/arrows to move, `Shift` to sprint, `J`/`Space` to pass, `K` to shoot.
+- **SHOOT**: hold to power up, release to shoot. The longer you hold, the faster the ball, and the less time the keeper has. **Full power = 🔥 fireball.**
+- Aiming: the held stick picks the target. Push up for the top post, down for the bottom post, centred (or straight ahead) for the middle. Push it to the edge to shoot high. You can't shoot from your own half.
+- Shot rules: outside the box the keeper must guess the side; weak shots from range are always saved, and so are shots down the middle (unless it's a fireball). Inside the box he must guess side _and_ height. In the six-yard box it always goes in.
+- When they shoot at you: push the stick toward the ball (to the edge for a high dive) and tap a button to dive. If you don't tap in time, the keeper dives where your stick points.
+- Keyboard: `WASD`/arrows to move, `Shift` to sprint, `J`/`Space` to pass, hold `K` to shoot.
 
 ## Scripts
 
