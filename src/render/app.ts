@@ -23,6 +23,8 @@ export class Stage {
   readonly speed = Math.max(1, Number(new URLSearchParams(location.search).get('speed')) || 1);
   offsetX = 0;
   offsetY = 0;
+  /** Shows the idle menu backdrop (set by main). Replaces whatever scene is running. */
+  idle: () => void = () => this.show(null);
 
   async init(parent: HTMLElement): Promise<void> {
     await this.app.init({

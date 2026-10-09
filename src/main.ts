@@ -95,6 +95,7 @@ export function showMenu(): void {
 
 async function boot(): Promise<void> {
   await stage.init(document.getElementById('stage')!);
+  stage.idle = () => void backdrop();
   sfx.setMuted(save.muted);
   showMenu();
 }
@@ -111,5 +112,6 @@ window.__game = {
   get penalty() {
     return penalty;
   },
+  showMenu,
   stage,
 };
