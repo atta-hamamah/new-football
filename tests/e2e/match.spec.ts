@@ -60,15 +60,25 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
 
   // Sam (red, attacks down the pitch) holds "right" on his screen.
   await expect.poll(async () => (await view(hostPage))?.state, { timeout: 8000 }).toBe('play');
-  const before = (await view(hostPage))!;
-  const sam = before.players.findIndex((p) => p.human === 1);
-  expect(before.players[sam].team).toBe(1);
+  // Control can switch to the teammate nearest the ball, so follow whoever Sam controls.
+  const samNow = async () => {
+    const v = (await view(hostPage))!;
+    const i = v.players.findIndex((p) => p.human === 1);
+    return { i, x: v.players[i].x, team: v.players[i].team, state: v.state };
+  };
+  expect((await samNow()).team).toBe(1);
   await joinPage.keyboard.down('d');
-  await joinPage.waitForTimeout(1500);
+  let moved = 0;
+  let prev = await samNow();
+  for (let k = 0; k < 10; k++) {
+    await hostPage.waitForTimeout(250);
+    const cur = await samNow();
+    if (cur.i === prev.i && cur.state === 'play') moved += cur.x - prev.x;
+    prev = cur;
+  }
   await joinPage.keyboard.up('d');
-  const after = (await view(hostPage))!;
   // Red's view is rotated, so screen-right is pitch -x.
-  expect(after.players[sam].x).toBeLessThan(before.players[sam].x - 1);
+  expect(moved).toBeLessThan(-2);
 
   // Both screens agree on the match.
   const hv = (await view(hostPage))!;

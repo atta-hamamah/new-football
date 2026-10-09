@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// Software-rendered CI browsers are slow at phone resolutions; a 1x screen keeps it smooth.
+test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+
 const phase = (page: Page) =>
   page.evaluate(() => (window as unknown as { __game: { penalty: { phase: string } | null } }).__game.penalty?.phase);
 
@@ -35,6 +38,7 @@ async function playShootout(page: Page) {
 }
 
 test('menu → run map → a full shootout with real input', async ({ page }) => {
+  test.setTimeout(300_000);
   await boot(page);
   await page.screenshot({ path: 'test-results/menu.png' });
   await page.click('#play-run');

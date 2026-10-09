@@ -39,7 +39,8 @@ export class Stage {
     this.app.stage.addChild(this.world);
     this.app.ticker.add((t) => {
       this.layout();
-      this.scene?.update(Math.min(0.05, t.deltaMS / 1000) * this.speed);
+      // Keep real time down to ~10 fps (slow phones), but don't jump after the app was in the background.
+      this.scene?.update(Math.min(0.1, t.deltaMS / 1000) * this.speed);
     });
   }
 

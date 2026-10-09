@@ -9,7 +9,7 @@ import { VIEW_H, VIEW_W } from './app';
 export const PX = 16; // pixels per metre
 const CX = VIEW_W / 2;
 const CY = VIEW_H / 2 + 34;
-const PLAYER_DRAW_R = 0.85;
+const PLAYER_DRAW_R = 1.0;
 
 export interface TeamKit {
   color: number;
