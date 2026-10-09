@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
 // Every sound is synthesised with Web Audio: no asset files, tiny download, and the
 // crowd can react to what happens (roar on goals, groan on misses).
 
@@ -183,7 +186,12 @@ export class Sfx {
   }
 }
 
+/** Short vibration: native haptics in the app (iPhone + Android), vibrate() in browsers. */
 export function haptic(ms: number): void {
+  if (Capacitor.isNativePlatform()) {
+    void Haptics.impact({ style: ms >= 30 ? ImpactStyle.Heavy : ms >= 15 ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {});
+    return;
+  }
   try {
     navigator.vibrate?.(ms);
   } catch {

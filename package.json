@@ -30,6 +30,7 @@
   "dependencies": {
     "@capacitor/android": "8.5.2",
     "@capacitor/core": "8.5.2",
+    "@capacitor/haptics": "8.0.2",
     "@capacitor/ios": "8.5.2",
     "pixi.js": "^8.22.0"
   }
