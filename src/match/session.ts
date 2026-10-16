@@ -19,6 +19,9 @@ export interface Session {
   lost?: string;
 }
 
+/** Most ticks run in one frame (0.25 s): more than a 5 fps frame needs (see Stage). */
+const MAX_STEPS = 15;
+
 /** Runs a fixed-step simulation from real time. Used by local play and by the Wi-Fi host. */
 export class SimRunner {
   sim: MatchSim;
@@ -38,13 +41,13 @@ export class SimRunner {
     this.acc += dt;
     const all: MatchEvent[] = [];
     let steps = 0;
-    while (this.acc >= DT && steps++ < 8) {
+    while (this.acc >= DT && steps++ < MAX_STEPS) {
       this.acc -= DT;
       const ev = this.sim.step(inputs());
       all.push(...ev);
       onTick?.(ev);
     }
-    if (steps >= 8) this.acc = 0; // tab was in the background: don't fast-forward
+    if (steps >= MAX_STEPS) this.acc = 0; // tab was in the background: don't fast-forward
     return all;
   }
 }

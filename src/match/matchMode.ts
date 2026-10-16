@@ -18,9 +18,12 @@ export class MatchMode implements Scene {
   readonly scene: MatchScene;
   private readonly controls: Controls;
   private readonly hud: HTMLElement;
+  private hudEls: { left: HTMLElement; right: HTMLElement; clock: HTMLElement } | null = null;
   private lastView: ViewState | null = null;
   private lastCharge = -1;
   private endShown = false;
+  private lostShown = false;
+  private quitting = false;
   private endPanel: HTMLElement | null = null;
 
   constructor(
@@ -63,8 +66,8 @@ export class MatchMode implements Scene {
       if (view.state !== 'ended' && this.endShown) this.hideEnd();
       this.lastView = view;
     }
-    if (this.session.lost && !this.endShown) {
-      this.endShown = true;
+    if (this.session.lost && !this.lostShown) {
+      this.lostShown = true;
       void banner('Connection lost', 'bad', this.session.lost, 2500).then(() => this.quit());
     }
     this.scene.update(dt);
@@ -115,16 +118,9 @@ export class MatchMode implements Scene {
     }
   }
 
-  private renderHud(v: ViewState): void {
-    const secs = Math.ceil(v.clock);
-    const clock = v.state === 'ended' ? 'FT' : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  /** Builds the HUD once; later frames only change its text, so the quit button never moves under a finger. */
+  private buildHud(): { left: HTMLElement; right: HTMLElement; clock: HTMLElement } {
     const me = this.session.myTeam;
-    // My team is always shown on the left (it attacks to the right).
-    const left = me;
-    const right = (1 - me) as Team;
-    const key = `${v.score[0]}-${v.score[1]}-${clock}-${v.state}`;
-    if (this.hud.dataset.key === key) return;
-    this.hud.dataset.key = key;
     const side = (t: Team, align: string) =>
       h(
         'div',
@@ -132,17 +128,34 @@ export class MatchMode implements Scene {
         h('span', { class: 'mbadge' }),
         h('span', { class: 'mname' }, t === me ? 'YOU' : this.session.names.size > 1 ? 'AWAY' : 'CPU'),
       );
+    const els = { left: h('span', {}, '0'), right: h('span', {}, '0'), clock: h('div', { class: 'mclock glass' }) };
+    // My team is always shown on the left (it attacks to the right).
     this.hud.replaceChildren(
       h('button', { class: 'icon-btn glass', onclick: () => this.quit() }, '✕'),
       h(
         'div',
         { class: 'mboard glass' },
-        side(left, 'l'),
-        h('div', { class: 'mscore' }, h('span', {}, String(v.score[left])), h('i', {}, ''), h('span', {}, String(v.score[right]))),
-        side(right, 'r'),
+        side(me, 'l'),
+        h('div', { class: 'mscore' }, els.left, h('i', {}, ''), els.right),
+        side((1 - me) as Team, 'r'),
       ),
-      h('div', { class: 'mclock glass' + (secs <= 10 && v.state !== 'ended' ? ' late' : '') }, clock),
+      els.clock,
     );
+    return els;
+  }
+
+  private renderHud(v: ViewState): void {
+    this.hudEls ??= this.buildHud();
+    const secs = Math.ceil(v.clock);
+    const clock = v.state === 'ended' ? 'FT' : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    const me = this.session.myTeam;
+    const set = (el: HTMLElement, text: string) => {
+      if (el.textContent !== text) el.textContent = text;
+    };
+    set(this.hudEls.left, String(v.score[me]));
+    set(this.hudEls.right, String(v.score[1 - me]));
+    set(this.hudEls.clock, clock);
+    this.hudEls.clock.classList.toggle('late', secs <= 10 && v.state !== 'ended');
   }
 
   private showEnd(v: ViewState): void {
@@ -189,6 +202,9 @@ export class MatchMode implements Scene {
   }
 
   private quit(): void {
+    // Once only: e.g. the player taps ✕ while the "Connection lost" banner is about to leave too.
+    if (this.quitting) return;
+    this.quitting = true;
     sfx.click();
     this.exit();
   }

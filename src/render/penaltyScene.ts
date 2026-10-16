@@ -1,7 +1,7 @@
 // The penalty duel, seen from behind the spot: night stadium, goal, keeper, ball.
 // Pure presentation: the controller tells it what happens and when.
 
-import { BlurFilter, Container, Graphics } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import type { Tell } from '../duel/ai';
 import { BALL_R, GOAL_H, GOAL_HALF_W, type Point, ZONES } from '../duel/goal';
 import type { Outcome, Shot } from '../duel/resolve';
@@ -9,6 +9,7 @@ import type { Scene } from './app';
 import { VIEW_W } from './app';
 import { KeeperFigure, ShooterFigure } from './figures';
 import { CAM_H, FOCAL, GOAL_SCALE, GOAL_Z, HORIZON, project, SPOT_Z } from './projection';
+import { softSprite } from './soft';
 
 const NET_Z = GOAL_Z + 2;
 const NET_TOP = 2.2;
@@ -102,10 +103,8 @@ export class PenaltyScene implements Scene {
     this.world.addChild(sky);
 
     // Floodlight glow.
-    const glow = new Graphics();
-    glow.circle(60, 10, 180).fill({ color: 0xbfd9ff, alpha: 0.35 });
-    glow.circle(VIEW_W - 60, 10, 180).fill({ color: 0xbfd9ff, alpha: 0.35 });
-    glow.filters = [new BlurFilter({ strength: 40, quality: 4 })];
+    const glow = new Container();
+    glow.addChild(softSprite(60, 10, 260, 260, 0xbfd9ff, 0.35, 0.45), softSprite(VIEW_W - 60, 10, 260, 260, 0xbfd9ff, 0.35, 0.45));
     glow.blendMode = 'add';
 
     // Stands with crowd.

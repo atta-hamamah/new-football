@@ -56,10 +56,10 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
 
   await hostPage.click('#start-match');
   await expect(joinPage.locator('.mboard')).toBeVisible({ timeout: 5000 });
-  await expect.poll(async () => (await view(joinPage))?.state, { timeout: 8000 }).toBe('play');
+  await expect.poll(async () => (await view(joinPage))?.state, { timeout: 15000 }).toBe('play');
 
   // Sam (red) holds "right" on his screen: towards the goal red attacks.
-  await expect.poll(async () => (await view(hostPage))?.state, { timeout: 8000 }).toBe('play');
+  await expect.poll(async () => (await view(hostPage))?.state, { timeout: 15000 }).toBe('play');
   // Control can switch to the teammate nearest the ball, so follow whoever Sam controls.
   const samNow = async () => {
     const v = (await view(hostPage))!;
@@ -90,5 +90,5 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
 
   // Host quits: the joiner is told.
   await hostPage.click('.match-hud .icon-btn');
-  await expect(joinPage.locator('.banner')).toContainText('Connection lost', { timeout: 5000 });
+  await expect(joinPage.locator('.banner', { hasText: 'Connection lost' })).toHaveCount(1, { timeout: 5000 });
 });

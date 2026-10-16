@@ -40,10 +40,13 @@ export class Stage {
     parent.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
     this.app.stage.addChild(this.world);
+    // Keep real time down to 5 fps (slow phones, software-rendered test browsers): a Wi-Fi host
+    // that fell behind would slow the match down for everyone. The ticker caps each frame's
+    // step at 1/minFPS, so the game doesn't jump ahead after the app was in the background.
+    this.app.ticker.minFPS = 5;
     this.app.ticker.add((t) => {
       this.layout();
-      // Keep real time down to ~10 fps (slow phones), but don't jump after the app was in the background.
-      this.scene?.update(Math.min(0.1, t.deltaMS / 1000) * this.speed);
+      this.scene?.update((t.deltaMS / 1000) * this.speed);
     });
   }
 

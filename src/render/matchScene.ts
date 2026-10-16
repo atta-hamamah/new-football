@@ -4,11 +4,12 @@
 // Pitch metres -> world pixels: world.x = pitch.y * PX * flip, world.y = pitch.x * PX * flip.
 // A camera container then follows the action.
 
-import { BlurFilter, Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 import { BOX_DEPTH, BOX_HALF_W, FIREBALL, GOAL_HALF, HALF_L, HALF_W, SIX_DEPTH, SIX_HALF_W, type Team } from '../match/types';
 import type { ViewState } from '../match/view';
 import type { Scene } from './app';
 import { VIEW_H, VIEW_W } from './app';
+import { SoftLayer, softSprite, vignette } from './soft';
 
 export const PX = 22; // world pixels per metre
 /** Disc radius in metres (drawn a bit larger than a real player so it reads on a phone). */
@@ -109,7 +110,7 @@ export class MatchScene implements Scene {
   readonly root = new Container();
   private readonly cam = new Container();
   private readonly world = new Container();
-  private readonly shadowLayer = new Graphics();
+  private readonly shadows = new SoftLayer(0.7);
   private readonly netG = new Graphics();
   private readonly marks = new Graphics();
   private readonly playersLayer = new Container();
@@ -118,7 +119,7 @@ export class MatchScene implements Scene {
   private readonly ball = new Container();
   private readonly ballG = new Graphics();
   private readonly fxG = new Graphics();
-  private readonly glowG = new Graphics();
+  private readonly glow = new SoftLayer(0.3);
   private readonly overlay = new Container();
   private readonly sprites: PlayerSprite[] = [];
   private readonly tags = new Map<number, Container>();
@@ -141,27 +142,25 @@ export class MatchScene implements Scene {
     readonly kits: [TeamKit, TeamKit],
   ) {
     this.flip = viewTeam === 0 ? 1 : -1;
-    const vignette = this.buildStadium();
-    this.shadowLayer.filters = [new BlurFilter({ strength: 3, quality: 2 })];
-    this.shadowLayer.alpha = 0.45;
+    this.buildStadium();
+    this.shadows.root.alpha = 0.45;
     this.fxG.blendMode = 'add';
-    this.glowG.blendMode = 'add';
-    this.glowG.filters = [new BlurFilter({ strength: 6, quality: 2 })];
+    this.glow.root.blendMode = 'add';
     this.drawBall();
     this.world.addChild(
       this.netG,
       this.marks,
-      this.shadowLayer,
+      this.shadows.root,
       this.trailG,
       this.playersLayer,
       this.ballShadow,
       this.ball,
-      this.glowG,
+      this.glow.root,
       this.fxG,
       this.overlay,
     );
     this.cam.addChild(this.world);
-    this.root.addChild(this.cam, vignette);
+    this.root.addChild(this.cam, vignette(VIEW_W, VIEW_H));
   }
 
   /** Pitch metres -> world pixels. */
@@ -171,7 +170,7 @@ export class MatchScene implements Scene {
 
   // --- static stadium ----------------------------------------------------------------------
 
-  private buildStadium(): Graphics {
+  private buildStadium(): void {
     const L = HALF_L * PX;
     const W = HALF_W * PX;
     const g = new Graphics();
@@ -251,24 +250,19 @@ export class MatchScene implements Scene {
       }
     }
 
-    // Floodlight pools and vignette.
-    const light = new Graphics();
+    // Floodlight pools.
+    const light = new Container();
     for (const [x, y] of [
       [-L * 0.6, -W * 0.7],
       [L * 0.6, -W * 0.7],
       [-L * 0.6, W * 0.7],
       [L * 0.6, W * 0.7],
     ]) {
-      light.ellipse(x, y, L * 0.55, W * 0.65).fill({ color: 0xfff6d8, alpha: 0.07 });
+      light.addChild(softSprite(x, y, L * 0.55 + 90, W * 0.65 + 90, 0xfff6d8, 0.08, 0.55));
     }
-    light.filters = [new BlurFilter({ strength: 60, quality: 3 })];
     light.blendMode = 'add';
-    const vignette = new Graphics();
-    vignette.rect(-L - 600, -W - 600, 2 * L + 1200, 2 * W + 1200).stroke({ width: 900, color: 0x000000, alpha: 0.35 });
-    vignette.filters = [new BlurFilter({ strength: 80, quality: 2 })];
 
     this.world.addChild(g, light);
-    return vignette;
   }
 
   /** Goal frames and nets (redrawn when the net ripples). */
@@ -472,9 +466,11 @@ export class MatchScene implements Scene {
       this.playersLayer.addChild(s.root);
     }
 
-    const shadow = this.shadowLayer.clear();
+    const shadow = this.shadows;
     const marks = this.marks.clear();
-    const glow = this.glowG.clear();
+    const glow = this.glow;
+    shadow.begin();
+    glow.begin();
     const usedTags = new Set<number>();
 
     // Pass target / shot target hints.
@@ -497,7 +493,7 @@ export class MatchScene implements Scene {
       const fy = p.fx * this.flip;
       s.pointer.rotation = Math.atan2(fy, fx);
       s.animate(pos.x, pos.y, dt);
-      shadow.circle(pos.x + 3, pos.y + 6, DISC_R * PX * 1.02).fill(0x000000);
+      shadow.add(pos.x + 3, pos.y + 6, DISC_R * PX * 1.2, DISC_R * PX * 1.2, 0x000000, 1);
 
       // Rings: you (yellow), friends (white), ball carrier (subtle).
       const ring = s.ring.clear();
@@ -509,7 +505,7 @@ export class MatchScene implements Scene {
         const a0 = this.time * 3;
         ring.arc(0, 0, r + 8, a0, a0 + 1.2).stroke({ width: 3, color: c, alpha: 0.7, cap: 'round' });
         ring.arc(0, 0, r + 8, a0 + Math.PI, a0 + Math.PI + 1.2).stroke({ width: 3, color: c, alpha: 0.7, cap: 'round' });
-        glow.circle(pos.x, pos.y, r + 6).fill({ color: c, alpha: 0.18 });
+        glow.add(pos.x, pos.y, (r + 6) * 1.35, (r + 6) * 1.35, c, 0.2);
         // Shot charge meter.
         if (p.charge >= 0) {
           const full = p.charge >= 0.999;
@@ -560,7 +556,7 @@ export class MatchScene implements Scene {
     const z = v.ball.z;
     const lift = z * PX * 0.75;
     const br = 0.24 * PX * 1.45 * (1 + z * 0.22);
-    shadow.ellipse(b.x + 3 + z * 6, b.y + 5 + z * 9, br * 1.05, br * 0.8).fill(0x000000);
+    shadow.add(b.x + 3 + z * 6, b.y + 5 + z * 9, br * 1.25, br * 0.95, 0x000000, 1);
     this.ballShadow
       .clear()
       .ellipse(b.x + z * 6, b.y + 2 + z * 9, br * 0.9, br * 0.55)
@@ -611,9 +607,11 @@ export class MatchScene implements Scene {
           drag: 2,
         });
       }
-      glow.circle(b.x, b.y - lift, br * 4).fill({ color: 0xff6a00, alpha: 0.7 });
-      glow.circle(b.x, b.y - lift, br * 2).fill({ color: 0xffe08a, alpha: 0.8 });
+      glow.add(b.x, b.y - lift, br * 5.2, br * 5.2, 0xff6a00, 0.7);
+      glow.add(b.x, b.y - lift, br * 2.6, br * 2.6, 0xffe08a, 0.8);
     }
+    shadow.end();
+    glow.end();
   }
 
   destroy(): void {
