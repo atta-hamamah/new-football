@@ -708,7 +708,14 @@ button {
 }
 
 .howto p {
-  margin: 6px 0;
+  margin: 4px 0 10px;
+}
+
+.howto b {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text);
 }
 
 /* ---- match HUD + controls (glass) ---- */
@@ -1145,7 +1152,14 @@ button {
   .screen {
     padding: max(12px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
       max(24px, env(safe-area-inset-left));
-    justify-content: center;
+  }
+
+  /* Centre vertically when there's room, scroll from the top when there isn't
+     (justify-content: center would push the top out of reach). */
+  .screen::before,
+  .screen::after {
+    content: '';
+    flex: 1 0 0;
   }
 
   .split {
@@ -1239,7 +1253,11 @@ button {
   }
 
   .howto {
-    margin-top: 0;
+    margin-top: 16px;
+    width: min(1000px, 100%);
+    display: grid;
+    grid-template-columns: 1.7fr 1fr;
+    gap: 5vw;
   }
 
   .teams {

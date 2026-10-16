@@ -99,13 +99,17 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
       h(
         'div',
         { class: 'howto' },
-        h('b', {}, 'How to play'),
         h(
-          'p',
+          'div',
           {},
-          'Left thumb moves (push past the edge to sprint, you can’t turn while sprinting). PASS: tap. SHOOT: hold to power up, release to shoot. Full power = 🔥 fireball. Push the stick up / down while shooting to aim at the top / bottom post, leave it centred for the middle, push it to the edge to shoot high.',
+          h('b', {}, 'Attack'),
+          h(
+            'p',
+            {},
+            'Left thumb moves, past the edge sprints. PASS: tap. SHOOT: hold to power up, release to shoot (full power = 🔥 fireball). Aim with the stick: up / down = that post, centred = middle, at the edge = high.',
+          ),
         ),
-        h('p', {}, 'When they shoot at you: push the stick toward the ball and tap a button to dive.'),
+        h('div', {}, h('b', {}, 'Defend'), h('p', {}, 'When they shoot: push the stick toward the ball and tap a button to dive.')),
       ),
     ),
   );

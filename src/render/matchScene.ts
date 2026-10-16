@@ -104,6 +104,8 @@ interface Particle {
   size: number;
   grow: number;
   drag: number;
+  /** Fireball flames: drawn under the ball with normal blending (yellow when young, deep red when old). */
+  flame?: boolean;
 }
 
 export class MatchScene implements Scene {
@@ -119,6 +121,7 @@ export class MatchScene implements Scene {
   private readonly ball = new Container();
   private readonly ballG = new Graphics();
   private readonly fxG = new Graphics();
+  private readonly flameG = new Graphics();
   private readonly glow = new SoftLayer(0.3);
   private readonly overlay = new Container();
   private readonly sprites: PlayerSprite[] = [];
@@ -154,8 +157,9 @@ export class MatchScene implements Scene {
       this.trailG,
       this.playersLayer,
       this.ballShadow,
-      this.ball,
       this.glow.root,
+      this.flameG,
+      this.ball,
       this.fxG,
       this.overlay,
     );
@@ -417,6 +421,7 @@ export class MatchScene implements Scene {
 
     // Particles.
     const fx = this.fxG.clear();
+    const flames = this.flameG.clear();
     this.particles = this.particles.filter((p) => (p.life -= dt) > 0);
     for (const p of this.particles) {
       const k = Math.max(0, 1 - p.drag * dt);
@@ -426,7 +431,9 @@ export class MatchScene implements Scene {
       p.y += p.vy * dt;
       p.size += p.grow * dt;
       const a = p.life / p.max;
-      fx.circle(p.x, p.y, Math.max(0.5, p.size * (0.5 + a * 0.5))).fill({ color: p.color, alpha: Math.min(1, a * 1.4) });
+      const r = Math.max(0.5, p.size * (0.5 + a * 0.5));
+      if (p.flame) flames.circle(p.x, p.y, r).fill({ color: mix(0xc81e00, 0xffc93d, a * a), alpha: Math.min(0.95, a * 1.6) });
+      else fx.circle(p.x, p.y, r).fill({ color: p.color, alpha: Math.min(1, a * 1.4) });
     }
 
     // Camera: follow the ball, zoom in on shots, gentle shake.
@@ -582,33 +589,35 @@ export class MatchScene implements Scene {
         tg.moveTo(a.x, a.y)
           .lineTo(c.x, c.y)
           .stroke({
-            width: br * 2 * t * (fire ? 1.3 : 1),
-            color: fire ? mix(0xff2a00, 0xffd34d, t) : 0xffffff,
-            alpha: t * (shot ? 0.7 : 0.35),
+            width: br * 2 * t * (fire ? 1.5 : 1),
+            color: fire ? mix(0xb81800, 0xff8a1f, t) : 0xffffff,
+            alpha: t * (fire ? 0.85 : shot ? 0.7 : 0.35),
             cap: 'round',
           });
       }
     }
     if (fire) {
-      // Flaming tail.
-      for (let k = 0; k < 10; k++) {
-        const dirx = prev ? b.x - prev.x : 0;
-        const diry = prev ? b.y - lift - prev.y : 0;
-        const l = Math.hypot(dirx, diry) || 1;
+      // Flaming tail: flames stream back from the ball, plus a few bright sparks.
+      const dirx = prev ? b.x - prev.x : 0;
+      const diry = prev ? b.y - lift - prev.y : 0;
+      const l = Math.hypot(dirx, diry) || 1;
+      for (let k = 0; k < 12; k++) {
+        const spark = k >= 10;
         this.emit({
           x: b.x + (Math.random() - 0.5) * br,
           y: b.y - lift + (Math.random() - 0.5) * br,
-          vx: (-dirx / l) * (120 + Math.random() * 160) + (Math.random() - 0.5) * 60,
-          vy: (-diry / l) * (120 + Math.random() * 160) + (Math.random() - 0.5) * 60,
-          life: 0.25 + Math.random() * 0.3,
-          color: [0xff2a00, 0xff7a00, 0xffc14d, 0xfff1a8][k % 4],
-          size: br * (0.8 + Math.random() * 0.9),
-          grow: -br * 2.4,
+          vx: (-dirx / l) * (120 + Math.random() * 160) + (Math.random() - 0.5) * (spark ? 200 : 60),
+          vy: (-diry / l) * (120 + Math.random() * 160) + (Math.random() - 0.5) * (spark ? 200 : 60),
+          life: spark ? 0.3 : 0.22 + Math.random() * 0.3,
+          color: 0xffe9a8,
+          size: spark ? 1.5 + Math.random() : br * (0.9 + Math.random() * 0.8),
+          grow: spark ? 0 : -br * 2.2,
           drag: 2,
+          flame: !spark,
         });
       }
-      glow.add(b.x, b.y - lift, br * 5.2, br * 5.2, 0xff6a00, 0.7);
-      glow.add(b.x, b.y - lift, br * 2.6, br * 2.6, 0xffe08a, 0.8);
+      glow.add(b.x, b.y - lift, br * 5, br * 5, 0xff4a00, 0.4);
+      glow.add(b.x, b.y - lift, br * 2.4, br * 2.4, 0xffb347, 0.35);
     }
     shadow.end();
     glow.end();
