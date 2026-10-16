@@ -21,6 +21,7 @@ export class MatchMode implements Scene {
   private hudEls: { left: HTMLElement; right: HTMLElement; clock: HTMLElement } | null = null;
   private lastView: ViewState | null = null;
   private lastCharge = -1;
+  private screenKey = '';
   private endShown = false;
   private lostShown = false;
   private quitting = false;
@@ -62,6 +63,7 @@ export class MatchMode implements Scene {
       }
       this.lastCharge = charge;
       this.renderHud(view);
+      this.fitScreen();
       if (view.state === 'ended' && !this.endShown) this.showEnd(view);
       if (view.state !== 'ended' && this.endShown) this.hideEnd();
       this.lastView = view;
@@ -142,6 +144,15 @@ export class MatchMode implements Scene {
       els.clock,
     );
     return els;
+  }
+
+  /** Tells the scene which part of it is on screen and where the HUD ends (when the layout changes). */
+  private fitScreen(): void {
+    const key = `${this.stage.scale}:${this.stage.offsetX}:${this.stage.offsetY}`;
+    if (key === this.screenKey) return;
+    this.screenKey = key;
+    const hudBottom = this.hud.getBoundingClientRect().bottom;
+    this.scene.screen = { ...this.stage.visibleRect(), top: this.stage.toView(0, hudBottom).y };
   }
 
   private renderHud(v: ViewState): void {

@@ -36,6 +36,14 @@ function mix(a: number, b: number, t: number): number {
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
 
+/** Shirt numbers by role (keeper first). */
+const NUMBERS = [1, 4, 5, 8, 7, 9];
+
+/** Whether a kit colour is light enough to need dark text on it. */
+function isLight(color: number): boolean {
+  return ((color >> 16) & 255) * 0.3 + ((color >> 8) & 255) * 0.59 + (color & 255) * 0.11 > 170;
+}
+
 /** One player: a modern disc token with a shirt number and a facing arrow on its rim. */
 class PlayerSprite {
   readonly root = new Container();
@@ -57,7 +65,7 @@ class PlayerSprite {
     disc.ellipse(-R * 0.22, -R * 0.36, R * 0.62, R * 0.4).fill({ color: 0xffffff, alpha: 0.22 });
     disc.circle(0, 0, R).stroke({ width: R * 0.13, color: 0xffffff, alpha: 0.96 });
     disc.circle(0, 0, R * 0.9).stroke({ width: R * 0.05, color: keeper ? 0x111111 : kit.trim, alpha: keeper ? 0.25 : 0.35 });
-    const dark = ((color >> 16) & 255) * 0.3 + ((color >> 8) & 255) * 0.59 + (color & 255) * 0.11 > 170;
+    const dark = isLight(color);
     const label = new Text({
       text: String(number),
       style: {
@@ -136,9 +144,14 @@ export class MatchScene implements Scene {
   private zoom = BASE_ZOOM;
   private ballSpin = 0;
   private ripple: { side: number; y: number; t: number } | null = null;
+  /** Edge markers for teammates outside the view (by player index). */
+  private readonly markers = new Container();
+  private readonly markerOf = new Map<number, Container>();
   view: ViewState | null = null;
   names = new Map<number, string>();
   mySlot = -1;
+  /** The part of the scene on screen (wider than 1280x720 on long phones); `top` = just below the HUD. */
+  screen = { x: 0, y: 0, w: VIEW_W, h: VIEW_H, top: 70 };
 
   constructor(
     readonly viewTeam: Team,
@@ -164,7 +177,7 @@ export class MatchScene implements Scene {
       this.overlay,
     );
     this.cam.addChild(this.world);
-    this.root.addChild(this.cam, vignette(VIEW_W, VIEW_H));
+    this.root.addChild(this.cam, vignette(VIEW_W, VIEW_H), this.markers);
   }
 
   /** Pitch metres -> world pixels. */
@@ -461,6 +474,64 @@ export class MatchScene implements Scene {
       VIEW_W * 0.45 - cx * this.zoom + (Math.random() - 0.5) * this.shakeAmt,
       VIEW_H / 2 + 14 - cy * this.zoom + (Math.random() - 0.5) * this.shakeAmt,
     );
+    if (v) this.drawMarkers(v);
+  }
+
+  /** Teammates outside the view get a marker on the screen edge, pointing at them: who you can pass to. */
+  private drawMarkers(v: ViewState): void {
+    const s = this.screen;
+    // Hidden during a shot, which is a moment to focus on the ball.
+    this.markers.visible = v.state !== 'duel';
+    const r = DISC_R * PX * this.zoom;
+    const left = s.x + 40;
+    const right = s.x + s.w - 40;
+    const top = Math.max(s.y + 40, s.top + 30);
+    const bottom = s.y + s.h - 40;
+    v.players.forEach((p, i) => {
+      if (p.team !== this.viewTeam) return;
+      const wp = this.w(p.x, p.y);
+      const px = this.world.x + wp.x * this.zoom;
+      const py = this.world.y + wp.y * this.zoom;
+      const onScreen = px > s.x - r * 0.3 && px < s.x + s.w + r * 0.3 && py > s.y - r * 0.3 && py < s.y + s.h + r * 0.3;
+      let m = this.markerOf.get(i);
+      if (onScreen) {
+        if (m) m.visible = false;
+        return;
+      }
+      if (!m) {
+        m = this.makeMarker(p.team, p.role);
+        this.markers.addChild(m);
+        this.markerOf.set(i, m);
+      }
+      const mx = Math.max(left, Math.min(right, px));
+      const my = Math.max(top, Math.min(bottom, py));
+      m.visible = true;
+      m.position.set(mx, my);
+      m.children[0].rotation = Math.atan2(py - my, px - mx);
+    });
+  }
+
+  private makeMarker(team: Team, role: number): Container {
+    const kit = this.kits[team];
+    const color = role === 0 ? kit.keeper : kit.color;
+    const R = 20;
+    const m = new Container();
+    const arrow = new Graphics().poly([R + 12, 0, R - 1, -10, R - 1, 10]).fill({ color: 0xffffff, alpha: 0.95 });
+    const disc = new Graphics().circle(0, 0, R).fill(color).circle(0, 0, R).stroke({ width: 2.5, color: 0xffffff, alpha: 0.95 });
+    const label = new Text({
+      text: String(NUMBERS[role] ?? role),
+      style: {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+        fontSize: 21,
+        fontWeight: '900',
+        fill: isLight(color) ? 0x121521 : 0xffffff,
+      },
+    });
+    label.anchor.set(0.5, 0.52);
+    label.resolution = 3;
+    m.addChild(arrow, disc, label);
+    m.alpha = 0.92;
+    return m;
   }
 
   private drawView(v: ViewState, dt: number): void {
@@ -468,7 +539,7 @@ export class MatchScene implements Scene {
     while (this.sprites.length < v.players.length) {
       const i = this.sprites.length;
       const p = v.players[i];
-      const s = new PlayerSprite(this.kits[p.team], p.role === 0, [1, 4, 5, 8, 7, 9][p.role] ?? i);
+      const s = new PlayerSprite(this.kits[p.team], p.role === 0, NUMBERS[p.role] ?? i);
       this.sprites.push(s);
       this.playersLayer.addChild(s.root);
     }

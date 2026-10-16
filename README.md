@@ -33,7 +33,7 @@ npm run dev            # then open the game in two browsers / devices on the sam
 **6v6** (landscape: you always attack to the right)
 
 - Left thumb: floating joystick. Push past the rim to sprint (you can't turn while sprinting).
-- **PASS**: no direction → nearest teammate; direction → nearest that way; pushed to the edge → farthest that way. Without the ball, PASS switches player.
+- **PASS**: no direction → nearest teammate; direction → nearest that way; pushed to the edge → farthest that way. Without the ball, PASS switches player. Teammates off screen show as numbered markers on the edge, pointing at them.
 - **SHOOT**: hold to power up, release to shoot. The longer you hold, the faster the ball, and the less time the keeper has. **Full power = 🔥 fireball.**
 - Aiming: the held stick picks the target. Push up for the top post, down for the bottom post, centred (or straight ahead) for the middle. Push it to the edge to shoot high. You can't shoot from your own half.
 - Shot rules: outside the box the keeper must guess the side; weak shots from range are always saved, and so are shots down the middle (unless it's a fireball). Inside the box he must guess side _and_ height. In the six-yard box it always goes in.

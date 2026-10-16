@@ -83,6 +83,12 @@ export class Stage {
     return { x: (clientX - rect.left - this.offsetX) / this.scale, y: (clientY - rect.top - this.offsetY) / this.scale };
   }
 
+  /** The part of the logical space that is on screen: wider (or taller) than 1280x720 on most phones. */
+  visibleRect(): { x: number; y: number; w: number; h: number } {
+    const s = this.scale;
+    return { x: -this.offsetX / s, y: -this.offsetY / s, w: this.app.screen.width / s, h: this.app.screen.height / s };
+  }
+
   /** Screen pixels per logical unit (for converting finger travel). */
   get pxPerUnit(): number {
     return this.scale;
