@@ -3,8 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 4174;
 
 export default defineConfig({
-  testDir: 'tests/e2e',
   timeout: 120_000,
+  projects: [
+    { name: 'e2e', testDir: 'tests/e2e' },
+    // Review screenshots (npm run shots), not run in CI.
+    { name: 'shots', testDir: 'tests/shots', timeout: 240_000 },
+  ],
   use: {
     baseURL: `http://localhost:${PORT}`,
     ...devices['Pixel 7'],

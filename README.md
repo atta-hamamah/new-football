@@ -48,6 +48,7 @@ npm run dev            # then open the game in two browsers / devices on the sam
 | `npm run build`           | Type-check + production web build into `dist/`                                       |
 | `npm test`                | Unit tests: duel rules, keepers, run, shootout, 6v6 rules, AI matches, netcode       |
 | `npm run test:e2e`        | Playwright: plays a shootout, a match vs computer, and a two-phone Wi-Fi game        |
+| `npm run shots`           | Landscape-phone screenshots of every main screen into `test-results/shots/`          |
 | `npm run balance`         | Simulates thousands of Penalty Runs with bot players and prints the difficulty curve |
 | `npm run lan-dev`         | Wi-Fi stand-in relay for browser multiplayer                                         |
 | `npm run lint` / `format` | Prettier                                                                             |
