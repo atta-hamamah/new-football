@@ -2,7 +2,7 @@
 // (landscape 1280x720) that is scaled to fit any screen.
 
 import { Application, Container } from 'pixi.js';
-// Register text rendering before the renderer is created. The 6v6 code that uses Text is
+// Register text rendering before the renderer is created. The 7v7 code that uses Text is
 // loaded later (lazily), and a renderer only picks up render pipes that exist at creation.
 import 'pixi.js/text';
 

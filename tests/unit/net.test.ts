@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NO_INPUT } from '../../src/match/types';
+import { NO_INPUT, PLAYERS_PER_TEAM } from '../../src/match/types';
 import { decodeSnapshot, encodeSnapshot, viewFromSim } from '../../src/match/view';
 import { MatchSim } from '../../src/match/sim';
 import { LanClient } from '../../src/net/client';
@@ -28,7 +28,7 @@ describe('protocol', () => {
     const shifted = new Uint8Array(bytes.length + 1).subarray(1);
     shifted.set(bytes);
     const { view, events } = decodeSnapshot(decodeSnapFloats(shifted));
-    expect(view.players).toHaveLength(12);
+    expect(view.players).toHaveLength(2 * PLAYERS_PER_TEAM);
     expect(view.players[7].x).toBeCloseTo(v.players[7].x, 4);
     expect(view.state).toBe(v.state);
     expect(view.ball.owner).toBe(v.ball.owner);
@@ -76,15 +76,16 @@ describe('host + clients over a network', () => {
     expect(started).toBe(1);
 
     // Run ~2 seconds: host simulates, clients send inputs and receive snapshots.
+    // The host kicks off (taps PASS) after the whistle.
     for (let f = 0; f < 120; f++) {
-      host.update(1 / 60, NO_INPUT);
+      host.update(1 / 60, { ...NO_INPUT, pass: f === 66 });
       c1.update(1 / 60, { ...NO_INPUT, mx: 0.8, my: 0 });
       c2.update(1 / 60, NO_INPUT);
       await flush();
     }
     const v1 = c1.update(0, NO_INPUT).view;
     expect(v1).not.toBeNull();
-    expect(v1!.players).toHaveLength(12);
+    expect(v1!.players).toHaveLength(2 * PLAYERS_PER_TEAM);
     const sim = host.sim!;
     expect(sim.humans.size).toBe(3);
     // Sam's controlled player is moving in +x (his input) after kickoff.

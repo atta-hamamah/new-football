@@ -1,0 +1,8 @@
+{
+  // Terminals opened in this project use Node 22 (Capacitor 8 needs it) and Java 21 (Gradle),
+  // without changing the global nvm version that other projects use.
+  "terminal.integrated.env.windows": {
+    "PATH": "${env:NVM_HOME}\\v22.23.1;${env:PATH}",
+    "JAVA_HOME": "C:\\Program Files\\Android\\Android Studio\\jbr"
+  }
+}

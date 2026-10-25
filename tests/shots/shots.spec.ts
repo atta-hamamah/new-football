@@ -57,7 +57,7 @@ test('menu and Penalty Run', async ({ browser }) => {
   await shot(page, '06-penalty-keeping');
 });
 
-test('6v6 vs computer: charge, fireball, save', async ({ browser }) => {
+test('7v7 vs computer: charge, fireball, save', async ({ browser }) => {
   const page = await (await browser.newContext(phone)).newPage();
   await page.goto('/');
   await page.click('#play-match');

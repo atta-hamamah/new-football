@@ -127,19 +127,25 @@ export function aiThink(sim: MatchSim, i: number, formationOnly: boolean): AiMov
   let speed = WALK * 0.85;
 
   if (!formationOnly && sim.state === 'play') {
-    if (b.owner < 0 && b.passTarget !== i) {
-      // Loose ball: the closest computer player of each team goes for it.
+    const ourPass = b.passTarget >= 0 && sim.players[b.passTarget].team === team;
+    if (b.owner < 0 && b.passTarget !== i && !ourPass) {
+      // Loose ball: the closest computer player of each team goes for it (a long ball: where it comes down).
       const lead = 0.35;
-      const px = b.x + b.vx * lead;
-      const py = b.y + b.vy * lead;
-      if (closestOutfield(sim, team, px, py) === i) {
-        target = { x: px, y: py };
+      const spot = b.flying ? sim.receivePoint() : { x: b.x + b.vx * lead, y: b.y + b.vy * lead };
+      if (closestOutfield(sim, team, spot.x, spot.y) === i) {
+        target = spot;
         speed = SPRINT;
       }
     } else if (b.passTarget === i) {
-      // Move to meet the pass.
-      target = { x: b.x + b.vx * 0.25, y: b.y + b.vy * 0.25 };
-      speed = WALK;
+      const run = sim.passRun;
+      const runSpeed = Math.hypot(run.x, run.y);
+      if (!b.flying && runSpeed > 1.5) {
+        // A ground pass is aimed into the run: keep going and it arrives at your feet.
+        return { vx: run.x, vy: run.y };
+      }
+      // Standing still: step in to meet it (run to where a long ball comes down).
+      target = sim.receivePoint();
+      speed = b.z > 0.05 ? SPRINT : WALK;
     } else if (b.owner >= 0 && sim.players[b.owner].team === opp) {
       // Opponent has the ball: nearest presses, second nearest covers.
       const o = sim.players[b.owner];

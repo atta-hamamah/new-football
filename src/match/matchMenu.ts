@@ -48,7 +48,7 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
     h(
       'div',
       { class: 'menu match-menu' },
-      h('div', { class: 'map-head' }, h('button', { class: 'icon-btn', onclick: back }, '←'), h('h2', {}, '6v6 MATCH'), h('span', {})),
+      h('div', { class: 'map-head' }, h('button', { class: 'icon-btn', onclick: back }, '←'), h('h2', {}, '7v7 MATCH'), h('span', {})),
       h(
         'div',
         { class: 'split' },
@@ -106,10 +106,19 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
           h(
             'p',
             {},
-            'Left thumb moves, past the edge sprints. PASS: tap. SHOOT: hold to power up, release to shoot (full power = 🔥 fireball). Aim with the stick: up / down = that post, centred = middle, at the edge = high.',
+            'Left thumb moves, past the edge sprints. PASS: tap = to the nearest teammate the stick points at, hold until the ring is full = long ball to the far one (nobody can touch it until it lands). SHOOT: hold to power up, release to shoot (full power = 🔥 fireball). Aim with the stick: up / down = that post, centred = middle, at the edge = high.',
           ),
         ),
-        h('div', {}, h('b', {}, 'Defend'), h('p', {}, 'When they shoot: push the stick toward the ball and tap a button to dive.')),
+        h(
+          'div',
+          {},
+          h('b', {}, 'Defend'),
+          h(
+            'p',
+            {},
+            'Touch the man on the ball to win it: the ball moves away with you. PASS: tap = switch to the player nearest the ball, hold = chase the ball. When they shoot: push the stick toward the ball and tap a button to dive.',
+          ),
+        ),
       ),
     ),
   );

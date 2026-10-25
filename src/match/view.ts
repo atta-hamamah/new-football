@@ -16,6 +16,8 @@ export interface PlayerView {
   sprinting: boolean;
   /** Shot charge 0..1 while a human holds SHOOT, else -1. */
   charge: number;
+  /** Long-ball charge 0..1 while a human holds PASS on the ball, else -1. */
+  passCharge: number;
 }
 
 export interface DuelView {
@@ -66,6 +68,7 @@ export function viewFromSim(sim: MatchSim): ViewState {
       human: p.human,
       sprinting: p.sprinting,
       charge: sim.chargeOf(i),
+      passCharge: sim.passChargeOf(i),
     })),
     duel:
       d && (sim.state === 'duel' || sim.state === 'goal')
@@ -94,7 +97,7 @@ const STATES: MatchState[] = ['kickoff', 'play', 'duel', 'goal', 'ended'];
 const AREAS: ShotArea[] = ['own', 'long', 'danger', 'impossible'];
 const OUTCOMES = [null, 'goal', 'saved'] as const;
 const HEADER = 25;
-const PER_PLAYER = 7;
+const PER_PLAYER = 8;
 
 const EVENT_TYPES: MatchEvent['type'][] = ['kick', 'pass', 'steal', 'shot', 'goal', 'save', 'whistle', 'bounce'];
 
@@ -173,7 +176,7 @@ export function encodeSnapshot(v: ViewState, events: readonly MatchEvent[]): Flo
   ]);
   let o = HEADER;
   for (const p of v.players) {
-    out.set([p.x, p.y, p.fx, p.fy, p.team * 8 + p.role, (p.human + 1) * 2 + (p.sprinting ? 1 : 0), p.charge], o);
+    out.set([p.x, p.y, p.fx, p.fy, p.team * 8 + p.role, (p.human + 1) * 2 + (p.sprinting ? 1 : 0), p.charge, p.passCharge], o);
     o += PER_PLAYER;
   }
   out[o++] = events.length;
@@ -227,6 +230,7 @@ export function decodeSnapshot(f: Float32Array): { view: ViewState; events: Matc
       human: Math.floor(hs / 2) - 1,
       sprinting: hs % 2 === 1,
       charge: f[o + 6],
+      passCharge: f[o + 7],
     });
     o += PER_PLAYER;
   }

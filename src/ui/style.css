@@ -657,7 +657,7 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-/* ---- 6v6 menu ---- */
+/* ---- 7v7 menu ---- */
 
 .match-menu .tagline {
   margin: 8px 0 18px;
@@ -830,8 +830,8 @@ button {
   position: absolute;
   left: max(70px, calc(env(safe-area-inset-left) + 60px));
   bottom: max(50px, env(safe-area-inset-bottom));
-  width: 128px;
-  height: 128px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   border: 2px dashed rgba(255, 255, 255, 0.25);
   display: grid;
@@ -845,9 +845,9 @@ button {
 
 .stick-base {
   position: fixed;
-  width: 128px;
-  height: 128px;
-  margin: -64px 0 0 -64px;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.12));
   border: 2px solid rgba(255, 255, 255, 0.35);
@@ -873,8 +873,8 @@ button {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 58px;
-  height: 58px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffffff, #c9d3e6 70%);
   box-shadow:
@@ -965,6 +965,34 @@ button {
   background: conic-gradient(#ffd34d calc(var(--charge) * 100%), rgba(255, 255, 255, 0.12) 0);
   -webkit-mask: radial-gradient(circle, transparent 57px, #000 58px);
   mask: radial-gradient(circle, transparent 57px, #000 58px);
+}
+
+.act.pass.charging .act-ring {
+  opacity: 1;
+  background: conic-gradient(#4ff7c5 calc(var(--charge) * 100%), rgba(255, 255, 255, 0.12) 0);
+  -webkit-mask: radial-gradient(circle, transparent 41px, #000 42px);
+  mask: radial-gradient(circle, transparent 41px, #000 42px);
+}
+
+.kick-hint {
+  position: fixed;
+  left: 50%;
+  top: 74px;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: 14px;
+  background: rgba(8, 14, 10, 0.78);
+  border: 2px solid #4ff7c5;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.act.pass.full .act-ring {
+  background: conic-gradient(#d6fff3 100%, transparent 0);
+  box-shadow: 0 0 26px rgba(79, 247, 197, 0.85);
 }
 
 .act.shoot.full .act-ring {

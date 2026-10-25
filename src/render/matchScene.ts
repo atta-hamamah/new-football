@@ -1,22 +1,31 @@
-// Landscape 6v6 match view: stadium, pitch, animated top-down players, ball, effects.
+// Landscape 7v7 match view: stadium, pitch, animated top-down players, ball, effects.
 // Each player sees their own team attacking to the RIGHT of the screen.
 //
 // Pitch metres -> world pixels: world.x = pitch.y * PX * flip, world.y = pitch.x * PX * flip.
 // A camera container then follows the action.
 
 import { Container, Graphics, Text } from 'pixi.js';
-import { BOX_DEPTH, BOX_HALF_W, FIREBALL, GOAL_HALF, HALF_L, HALF_W, SIX_DEPTH, SIX_HALF_W, type Team } from '../match/types';
+import {
+  BOX_DEPTH,
+  BOX_HALF_W,
+  DISC_R,
+  FIREBALL,
+  GOAL_HALF,
+  HALF_L,
+  HALF_W,
+  SIX_DEPTH,
+  SIX_HALF_W,
+  type Team,
+} from '../match/types';
 import type { ViewState } from '../match/view';
 import type { Scene } from './app';
 import { VIEW_H, VIEW_W } from './app';
 import { SoftLayer, softSprite, vignette } from './soft';
 
 export const PX = 22; // world pixels per metre
-/** Disc radius in metres (drawn a bit larger than a real player so it reads on a phone). */
-const DISC_R = 0.78;
 const GOAL_DEPTH = 1.8;
-/** Camera zoom: close enough to see the players clearly; the camera follows the ball. */
-const BASE_ZOOM = 1.45;
+/** Camera zoom: high enough to see most of the pitch, close enough to read the players; it follows the ball. */
+const BASE_ZOOM = 0.95;
 
 export interface TeamKit {
   color: number;
@@ -37,7 +46,7 @@ function mix(a: number, b: number, t: number): number {
 }
 
 /** Shirt numbers by role (keeper first). */
-const NUMBERS = [1, 4, 5, 8, 7, 9];
+const NUMBERS = [1, 4, 5, 8, 7, 9, 6];
 
 /** Whether a kit colour is light enough to need dark text on it. */
 function isLight(color: number): boolean {
@@ -604,6 +613,14 @@ export class MatchScene implements Scene {
             });
           }
         }
+        // Long-ball charge meter: only a full ring is a long ball.
+        if (p.passCharge >= 0) {
+          const full = p.passCharge >= 0.999;
+          ring
+            .arc(0, 0, r + 14, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, p.passCharge))
+            .stroke({ width: full ? 8 : 6, color: full ? 0xd6fff3 : 0x4ff7c5, cap: 'round' });
+          if (full) glow.add(pos.x, pos.y, (r + 18) * 1.4, (r + 18) * 1.4, 0x4ff7c5, 0.35);
+        }
         const tag = this.nameTag(p.human, mine ? 'YOU' : (this.names.get(p.human) ?? `P${p.human + 1}`), mine);
         tag.position.set(pos.x, pos.y - r - 26);
         tag.visible = true;
@@ -633,7 +650,8 @@ export class MatchScene implements Scene {
     const b = this.w(v.ball.x, v.ball.y);
     const z = v.ball.z;
     const lift = z * PX * 0.75;
-    const br = 0.24 * PX * 1.45 * (1 + z * 0.22);
+    // Grows only a little with height: the lift and the shadow already show it is in the air.
+    const br = 0.24 * PX * 1.25 * (1 + z * 0.08);
     shadow.add(b.x + 3 + z * 6, b.y + 5 + z * 9, br * 1.25, br * 0.95, 0x000000, 1);
     this.ballShadow
       .clear()

@@ -1,4 +1,4 @@
-// The 6v6 match screen: drives a Session, draws it, plays sounds, shows the HUD.
+// The 7v7 match screen: drives a Session, draws it, plays sounds, shows the HUD.
 
 import type { Scene, Stage } from '../render/app';
 import { MatchScene, type TeamKit } from '../render/matchScene';
@@ -57,6 +57,9 @@ export class MatchMode implements Scene {
       const mine = view.players.find((p) => p.human === this.session.mySlot);
       const charge = mine ? mine.charge : -1;
       this.controls.setCharge(charge);
+      this.controls.setPassCharge(mine ? mine.passCharge : -1);
+      const myKickoff = view.state === 'kickoff' && view.ball.owner >= 0 && view.players[view.ball.owner]?.human === this.session.mySlot;
+      this.controls.setKickoff(myKickoff);
       if (charge >= 0.999 && this.lastCharge < 0.999) {
         sfx.chargeFull();
         haptic(25);

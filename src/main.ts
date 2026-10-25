@@ -91,7 +91,7 @@ export function showMenu(): void {
                   void import('./match/matchMenu').then((m) => m.showMatchMenu(stage, showMenu));
                 },
               },
-              '⚽ 6v6 Match',
+              '⚽ 7v7 Match',
             ),
           ),
           h(

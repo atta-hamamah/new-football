@@ -1,13 +1,14 @@
 // Landscape touch controls.
-// Left half: floating joystick (push past the rim to sprint, direction locks while sprinting).
+// Left half: floating joystick (push past the rim to sprint, still steering with the stick).
 // Right side: PASS and SHOOT. Hold SHOOT to charge; the stick picks where the shot goes.
+// PASS: tap = ground pass, hold until the ring is full = long ball. Off the ball: tap = switch player, hold = chase the ball.
 // Defending a shot: push the stick toward the ball and tap a button to dive.
 
 import { haptic } from '../ui/audio';
 import { h } from '../ui/dom';
 import { type Input, SPRINT_AT } from './types';
 
-const STICK_R = 64;
+const STICK_R = 60;
 
 const ICON_PASS =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -27,6 +28,7 @@ export class Controls {
   private readonly passBtn: HTMLButtonElement;
   private readonly shootBtn: HTMLButtonElement;
   private readonly diveHint: HTMLElement;
+  private readonly kickHint: HTMLElement;
   private stickId: number | null = null;
   private stickOrigin = { x: 0, y: 0 };
   /** Joystick in screen space (x right, y down), magnitude 0..1. */
@@ -51,6 +53,7 @@ export class Controls {
       h('div', { class: 'dive-sub' }, 'Push the stick toward the ball · tap to dive'),
       h('div', { class: 'dive-bar' }, h('span', {})),
     );
+    this.kickHint = h('div', { class: 'kick-hint hidden' }, 'Tap PASS to kick off · hold till the ring is full for a long ball');
     const zone = h('div', { class: 'stick-zone' });
     const hint = h('div', { class: 'stick-hint' }, 'MOVE');
     this.el = h(
@@ -61,6 +64,7 @@ export class Controls {
       this.base,
       h('div', { class: 'buttons' }, this.passBtn, this.shootBtn),
       this.diveHint,
+      this.kickHint,
     );
 
     zone.addEventListener('pointerdown', (e) => {
@@ -120,6 +124,18 @@ export class Controls {
     this.shootBtn.style.setProperty('--charge', String(Math.max(0, c)));
     this.shootBtn.classList.toggle('charging', c >= 0);
     this.shootBtn.classList.toggle('full', c >= 0.999);
+  }
+
+  /** Fills the ring on the PASS button while a long ball charges (0..1, full = long ball), or hides it (-1). */
+  setPassCharge(c: number): void {
+    this.passBtn.style.setProperty('--charge', String(Math.max(0, c)));
+    this.passBtn.classList.toggle('charging', c >= 0);
+    this.passBtn.classList.toggle('full', c >= 0.999);
+  }
+
+  /** Shows "tap PASS to kick off" while it's my kickoff. */
+  setKickoff(on: boolean): void {
+    this.kickHint.classList.toggle('hidden', !on);
   }
 
   private onDown(e: PointerEvent): void {

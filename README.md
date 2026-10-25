@@ -3,7 +3,7 @@
 Mobile football game with two modes:
 
 - **Penalty Run** (solo roguelike): 8 shootouts from Sunday League to The Final. Read each keeper's habits and body language, pick upgrades after every win, beat two boss keepers. There's also a **Daily Run**, the same seed for everyone, with a shareable result.
-- **6v6 Match** (landscape): arcade top-down football against the computer (Easy / Normal / Hard) or **with friends on the same Wi-Fi**. Every shot turns into a duel with the keeper: the defender swipes to dive.
+- **7v7 Match** (landscape): arcade top-down football against the computer (Easy / Normal / Hard) or **with friends on the same Wi-Fi**. Every shot turns into a duel with the keeper: the defender swipes to dive.
 
 Built with TypeScript + PixiJS, packaged for iPhone and Android with Capacitor.
 
@@ -30,10 +30,12 @@ npm run dev            # then open the game in two browsers / devices on the sam
 - Shooting: drag to move the aim, release to shoot. The aim wobbles more near the corners and the longer you hold.
 - Keeping: watch the run-up lean, then swipe left / right / up (or tap to stay) when the ball is struck. Keys: `Q W E / A S D`.
 
-**6v6** (landscape: you always attack to the right)
+**7v7** (landscape: you always attack to the right)
 
+- Kickoff: the taker must pass to the teammate beside them (tap PASS) before anyone can move.
 - Left thumb: floating joystick. Push past the rim to sprint (you can't turn while sprinting).
-- **PASS**: no direction → nearest teammate; direction → nearest that way; pushed to the edge → farthest that way. Without the ball, PASS switches player. Teammates off screen show as numbered markers on the edge, pointing at them.
+- **PASS** (acts on release): tap → fast ground pass to the nearest teammate the stick points at (no direction → nearest of all). Hold until the ring is full → lofted long ball to the far teammate that way (released before that, it's still a ground pass). Nobody, teammate or opponent, can touch a long ball until it lands.
+- Without the ball: tap PASS → switch to the player nearest the ball (the next nearest if that's already you); hold PASS → your player chases the ball. Touch the ball carrier to win the ball: they're knocked back for a moment and can't take it straight back. Teammates off screen show as numbered markers on the edge, pointing at them.
 - **SHOOT**: hold to power up, release to shoot. The longer you hold, the faster the ball, and the less time the keeper has. **Full power = 🔥 fireball.**
 - Aiming: the held stick picks the target. Push up for the top post, down for the bottom post, centred (or straight ahead) for the middle. Push it to the edge to shoot high. You can't shoot from your own half.
 - Shot rules: outside the box the keeper must guess the side; weak shots from range are always saved, and so are shots down the middle (unless it's a fireball). Inside the box he must guess side _and_ height. In the six-yard box it always goes in.
@@ -46,7 +48,7 @@ npm run dev            # then open the game in two browsers / devices on the sam
 | ------------------------- | ------------------------------------------------------------------------------------ |
 | `npm run dev`             | Dev server                                                                           |
 | `npm run build`           | Type-check + production web build into `dist/`                                       |
-| `npm test`                | Unit tests: duel rules, keepers, run, shootout, 6v6 rules, AI matches, netcode       |
+| `npm test`                | Unit tests: duel rules, keepers, run, shootout, 7v7 rules, AI matches, netcode       |
 | `npm run test:e2e`        | Playwright: plays a shootout, a match vs computer, and a two-phone Wi-Fi game        |
 | `npm run shots`           | Landscape-phone screenshots of every main screen into `test-results/shots/`          |
 | `npm run balance`         | Simulates thousands of Penalty Runs with bot players and prints the difficulty curve |
@@ -70,7 +72,7 @@ src/
   duel/      Shot vs keeper rules, keeper/shooter personalities and tells, aim wobble
   run/       Penalty Run: stages, opponents, upgrades, shootout rules, bot players
   penalty/   Penalty Run screens and game flow
-  match/     6v6: simulation (60 Hz, authoritative), team AI, controls, view/snapshots
+  match/     7v7: simulation (60 Hz, authoritative), team AI, controls, view/snapshots
   net/       Wi-Fi: protocol, host, client, transports (native plugin, dev relay, in-memory)
   render/    PixiJS scenes: night-stadium penalty view, top-down pitch
   ui/        Menus, sound (all synthesised with Web Audio), save data

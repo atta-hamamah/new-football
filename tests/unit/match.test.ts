@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { MatchSim, resolveDuel } from '../../src/match/sim';
-import { type Input, NO_INPUT, shotArea } from '../../src/match/types';
+import { MatchSim, PASS_SPEED, resolveDuel } from '../../src/match/sim';
+import { HALF_L, HALF_W, type Input, NO_INPUT, PASS_CHARGE_TIME, PLAYERS_PER_TEAM, shotArea } from '../../src/match/types';
 
 const cfg = { duration: 60, difficulty: 1, seed: 7 };
+/** Index of team 1's first player (its keeper); team 1 role r is T + r. */
+const T = PLAYERS_PER_TEAM;
 
 function place(sim: MatchSim, i: number, x: number, y: number) {
   Object.assign(sim.players[i], { x, y, vx: 0, vy: 0 });
@@ -19,9 +21,9 @@ describe('shot areas and rules', () => {
   it('classifies positions for both attacking directions', () => {
     expect(shotArea(0, 0, -5)).toBe('own');
     expect(shotArea(0, 0, 10)).toBe('long');
-    expect(shotArea(0, 6, 25)).toBe('danger');
-    expect(shotArea(0, 1, 28)).toBe('impossible');
-    expect(shotArea(1, 1, -28)).toBe('impossible');
+    expect(shotArea(0, 6, HALF_L - 5)).toBe('danger');
+    expect(shotArea(0, 1, HALF_L - 2)).toBe('impossible');
+    expect(shotArea(1, 1, -HALF_L + 2)).toBe('impossible');
     expect(shotArea(1, 0, 10)).toBe('own');
   });
 
@@ -62,7 +64,8 @@ describe('passing rules', () => {
     place(sim, 2, -15, 0); // far left
     place(sim, 4, 0, 6); // near ahead
     place(sim, 5, 0, -20); // far behind
-    for (let i = 6; i < 12; i++) place(sim, i, 18, 25 - i);
+    place(sim, 6, 12, -12); // out of the way
+    for (let i = T; i < 2 * T; i++) place(sim, i, 18, 25 - i);
     giveBall(sim, 3);
     return sim;
   }
@@ -79,42 +82,430 @@ describe('passing rules', () => {
     expect(sim.ball.passTarget).toBe(4);
   });
 
-  it('over-extended: farthest teammate that way', () => {
+  it('a stick pushed to the edge still means the nearest teammate that way', () => {
     const sim = setup();
     sim.pass(3, -1, 0);
+    expect(sim.ball.passTarget).toBe(1);
+  });
+
+  it('a slightly off-line teammate is still found', () => {
+    const sim = setup();
+    // Up-left diagonal: nobody is exactly there, the near-left player is within the cone.
+    sim.pass(3, -0.6, 0.45);
+    expect(sim.ball.passTarget).toBe(1);
+  });
+
+  it('long ball: goes to the far teammate that way and flies over defenders', () => {
+    const sim = setup();
+    sim.pass(3, -1, 0, -1, true);
     expect(sim.ball.passTarget).toBe(2);
-    const sim2 = setup();
-    sim2.pass(3, -0.5, 0);
-    expect(sim2.ball.passTarget).toBe(1);
+    expect(sim.ball.vz).toBeGreaterThan(0);
+    let owner = -1;
+    for (let t = 0; t < 240 && owner < 0; t++) {
+      // A defender stands still on the line to the far-left teammate.
+      place(sim, T + 1, -6, 0);
+      sim.step();
+      owner = sim.ball.owner;
+    }
+    expect(owner).toBe(2);
+  });
+
+  it('nobody can touch a long ball until it lands, not even a player right under it', () => {
+    const sim = setup();
+    sim.pass(3, -1, 0, -1, true);
+    let t = 0;
+    while (sim.ball.flying && t++ < 240) {
+      // An opponent shadows the ball the whole way; the receiver is kept away from where it lands.
+      place(sim, T + 1, sim.ball.x, sim.ball.y);
+      place(sim, 2, -15, 15);
+      sim.step();
+      if (sim.ball.flying) expect(sim.ball.owner).toBe(-1);
+    }
+    expect(sim.ball.flying).toBe(false);
+    // Once it is down, whoever is there takes it.
+    place(sim, T + 1, sim.ball.x, sim.ball.y);
+    sim.step();
+    expect(sim.ball.owner).toBe(T + 1);
+  });
+
+  it('ground passes are quick and reach the receiver', () => {
+    const sim = setup();
+    sim.pass(3, -0.5, 0);
+    expect(Math.hypot(sim.ball.vx, sim.ball.vy)).toBeGreaterThanOrEqual(14);
+    let t = 0;
+    while (sim.ball.owner < 0 && t < 120) {
+      sim.step();
+      t++;
+    }
+    expect(sim.ball.owner).toBe(1);
+    expect(t).toBeLessThan(30); // 5 m in under half a second
+  });
+
+  it('every ground pass has the same pace, short or long', () => {
+    const near = setup();
+    near.pass(3, -0.5, 0);
+    const far = setup();
+    far.pass(3, 0, -1);
+    expect(far.ball.passTarget).toBe(5);
+    for (const sim of [near, far]) {
+      for (let t = 0; t < 10; t++) sim.step();
+      expect(Math.hypot(sim.ball.vx, sim.ball.vy)).toBeCloseTo(PASS_SPEED, 5);
+    }
+  });
+
+  /** Steps until someone has the ball (or the pass gives up), forcing `each` every tick. */
+  function untilTaken(sim: MatchSim, each: () => void = () => {}) {
+    for (let t = 0; t < 400 && sim.ball.owner < 0; t++) {
+      each();
+      sim.step();
+    }
+    return sim.ball.owner;
+  }
+
+  it('a ground pass finds a receiver who keeps running away', () => {
+    const sim = setup();
+    sim.pass(3, 0, -1);
+    const target = sim.ball.passTarget;
+    // The receiver sprints off sideways the moment the ball is played.
+    const owner = untilTaken(sim, () => Object.assign(sim.players[target], { vx: 9, vy: 0 }));
+    expect(owner).toBe(target);
+  });
+
+  it("a pass is played into the receiver's run, and they keep running onto it", () => {
+    const sim = setup();
+    // The near-ahead teammate is running right.
+    Object.assign(sim.players[4], { vx: 6, vy: 0 });
+    sim.pass(3, 0, 0.6);
+    expect(sim.ball.passTarget).toBe(4);
+    // Aimed ahead of them, not straight at where they stand (straight up the pitch).
+    expect(sim.ball.vx).toBeGreaterThan(3);
+    expect(untilTaken(sim)).toBe(4);
+    expect(sim.players[4].vx).toBeGreaterThan(4);
+  });
+
+  it('control stays on the passer until the ball is about to reach the receiver', () => {
+    const sim = setup();
+    sim.addHuman(0, 0, 'you');
+    sim.assignControl(true);
+    const h = sim.humans.get(0)!;
+    expect(h.controlled).toBe(3);
+    sim.step(new Map([[0, { ...NO_INPUT, pass: true }]]));
+    sim.step(new Map([[0, { ...NO_INPUT, my: -0.6 }]])); // released towards the far one behind
+    expect(sim.ball.passTarget).toBe(5);
+    let switchedEarly = false;
+    while (sim.ball.owner < 0) {
+      const d = Math.hypot(sim.players[5].x - sim.ball.x, sim.players[5].y - sim.ball.y);
+      if (d > 7) expect(h.controlled).toBe(3);
+      if (h.controlled === 5) switchedEarly = true;
+      sim.step(new Map([[0, NO_INPUT]]));
+    }
+    expect(sim.ball.owner).toBe(5);
+    expect(switchedEarly).toBe(true); // just before the ball got there, not only on the touch
+    expect(h.controlled).toBe(5);
+  });
+
+  it('a teammate standing in the way lets the pass through to the receiver', () => {
+    const sim = setup();
+    sim.pass(3, 0, -1);
+    expect(sim.ball.passTarget).toBe(5);
+    expect(untilTaken(sim, () => place(sim, 6, 0, -10))).toBe(5);
+  });
+
+  it('an opponent on the line cuts out a ground pass', () => {
+    const sim = setup();
+    sim.pass(3, 0, -1);
+    expect(untilTaken(sim, () => place(sim, T + 2, 0, -10))).toBe(T + 2);
+  });
+
+  it('a long ball lands and still reaches a receiver on the move', () => {
+    const sim = setup();
+    sim.pass(3, -1, 0, -1, true);
+    const target = sim.ball.passTarget;
+    expect(untilTaken(sim, () => Object.assign(sim.players[target], { vx: 0, vy: 8 }))).toBe(target);
+  });
+});
+
+/** Waits for the kickoff whistle, then taps PASS to start play. */
+function kickOff(sim: MatchSim) {
+  for (let i = 0; i < 62; i++) sim.step(new Map([[0, NO_INPUT]]));
+  sim.step(new Map([[0, { ...NO_INPUT, pass: true }]]));
+  sim.step(new Map([[0, NO_INPUT]]));
+}
+
+describe('kickoff', () => {
+  it('nobody moves until the taker passes to a teammate', () => {
+    const sim = new MatchSim(cfg);
+    sim.addHuman(0, 0, 'you');
+    for (let i = 0; i < 120; i++) sim.step(new Map([[0, { ...NO_INPUT, mx: 1, my: 0 }]]));
+    expect(sim.state).toBe('kickoff');
+    expect(sim.ball.owner).toBe(5);
+    expect(sim.players[5].x).toBeCloseTo(0, 5);
+    const clock = sim.clock;
+    sim.step(new Map([[0, { ...NO_INPUT, pass: true }]]));
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.state).toBe('play');
+    expect(sim.ball.passTarget).toBe(4); // the partner beside the taker
+    expect(sim.clock).toBe(clock);
+  });
+
+  it('the computer kicks off with a pass, and an idle human gets theirs taken for them', () => {
+    const cpu = new MatchSim(cfg);
+    let passed = false;
+    for (let i = 0; i < 120 && !passed; i++) passed = cpu.step().some((e) => e.type === 'pass');
+    expect(passed).toBe(true);
+    expect(cpu.state).toBe('play');
+
+    const idle = new MatchSim(cfg);
+    idle.addHuman(0, 0, 'you');
+    for (let i = 0; i < 60 * 7; i++) idle.step(new Map([[0, NO_INPUT]]));
+    expect(idle.state).toBe('play');
   });
 });
 
 describe('human control', () => {
-  it('controls the ball carrier and follows passes', () => {
+  it('the ball slows you a little, walking or sprinting; a sprint is always quicker', () => {
+    const speedAfter = (withBall: boolean, mx: number) => {
+      const sim = new MatchSim(cfg);
+      sim.addHuman(0, 0, 'you');
+      place(sim, 3, 0, -10);
+      if (withBall) giveBall(sim, 3);
+      else {
+        // An opponent far away has it.
+        place(sim, T + 3, 15, 25);
+        giveBall(sim, T + 3);
+        Object.assign(sim.ball, { x: 15, y: 24 });
+      }
+      Object.assign(sim.humans.get(0)!, { controlled: 3, lockSwitch: 10 });
+      sim.players[3].human = 0;
+      for (let t = 0; t < 40; t++) sim.step(new Map([[0, { ...NO_INPUT, mx }]]));
+      return Math.hypot(sim.players[3].vx, sim.players[3].vy);
+    };
+    const walk = speedAfter(false, 0.9);
+    const dribble = speedAfter(true, 0.9);
+    const sprint = speedAfter(false, 1);
+    const dribbleSprint = speedAfter(true, 1);
+    expect(walk).toBeGreaterThan(7);
+    expect(dribble).toBeLessThan(walk);
+    expect(dribble).toBeGreaterThan(6);
+    expect(dribbleSprint).toBeLessThan(sprint);
+    expect(sprint).toBeGreaterThan(walk);
+    expect(dribbleSprint).toBeGreaterThan(dribble);
+  });
+
+  it('controls the ball carrier and follows passes (PASS fires on release)', () => {
     const sim = new MatchSim(cfg);
     sim.addHuman(0, 0, 'you');
     const striker = 5;
     expect(sim.humans.get(0)!.controlled).toBe(striker); // kickoff taker
-    // Run the kickoff freeze.
     for (let i = 0; i < 70; i++) sim.step(new Map([[0, NO_INPUT]]));
     const press = (inp: Partial<Input>) => sim.step(new Map([[0, { ...NO_INPUT, ...inp }]]));
     press({ pass: true });
+    expect(sim.ball.owner).toBe(striker);
+    press({});
     const target = sim.ball.passTarget;
     expect(target).toBeGreaterThan(0);
     expect(sim.humans.get(0)!.controlled).toBe(target);
   });
 
-  it('sprint locks the direction until the stick leaves the edge', () => {
+  it('PASS must charge to full for a long ball; released early it is a ground pass', () => {
+    const passAfter = (ticks: number) => {
+      const sim = new MatchSim(cfg);
+      sim.addHuman(0, 0, 'you');
+      kickOff(sim);
+      const me = sim.humans.get(0)!.controlled;
+      giveBall(sim, me);
+      for (let t = 0; t < ticks; t++) sim.step(new Map([[0, { ...NO_INPUT, pass: true }]]));
+      const charge = sim.passChargeOf(me);
+      sim.step(new Map([[0, NO_INPUT]]));
+      expect(sim.ball.owner).not.toBe(me);
+      return { charge, lofted: sim.ball.flying };
+    };
+    const half = passAfter(30);
+    expect(half.charge).toBeGreaterThan(0.3);
+    expect(half.charge).toBeLessThan(1);
+    expect(half.lofted).toBe(false);
+    const full = passAfter(Math.ceil(PASS_CHARGE_TIME * 60) + 2);
+    expect(full.charge).toBe(1);
+    expect(full.lofted).toBe(true);
+  });
+
+  it('a sprint steers with the stick, turning wider than a walk', () => {
     const sim = new MatchSim(cfg);
     sim.addHuman(0, 0, 'you');
-    for (let i = 0; i < 70; i++) sim.step(new Map([[0, NO_INPUT]]));
+    kickOff(sim);
+    for (let i = 0; i < 40; i++) sim.step(new Map([[0, NO_INPUT]]));
+    giveBall(sim, sim.humans.get(0)!.controlled);
     const me = sim.players[sim.humans.get(0)!.controlled];
     for (let i = 0; i < 20; i++) sim.step(new Map([[0, { ...NO_INPUT, mx: 1, my: 0 }]]));
     expect(me.sprinting).toBe(true);
-    // Pushing to the edge in another direction keeps the old direction.
-    for (let i = 0; i < 20; i++) sim.step(new Map([[0, { ...NO_INPUT, mx: 0, my: 1 }]]));
-    expect(me.fx).toBeCloseTo(1, 5);
-    expect(Math.abs(me.vy)).toBeLessThan(0.5);
+    // Swinging the stick round the edge turns the sprint without slowing to a walk, but not at once.
+    for (let i = 0; i < 6; i++) sim.step(new Map([[0, { ...NO_INPUT, mx: 0, my: 1 }]]));
+    expect(me.fy).toBeLessThan(0.6);
+    for (let i = 0; i < 45; i++) sim.step(new Map([[0, { ...NO_INPUT, mx: 0, my: 1 }]]));
+    expect(me.sprinting).toBe(true);
+    expect(me.fy).toBeCloseTo(1, 5);
+    expect(me.vy).toBeGreaterThan(8);
+    expect(Math.abs(me.vx)).toBeLessThan(1);
+  });
+});
+
+describe('defending', () => {
+  /** Team 1 (computer) has the ball; my team 0 is spread out. */
+  function defend() {
+    const sim = new MatchSim(cfg);
+    sim.addHuman(0, 0, 'you');
+    kickOff(sim);
+    place(sim, 1, -12, -20);
+    place(sim, 2, 12, -20);
+    place(sim, 3, -4, -8);
+    place(sim, 4, 4, 6); // nearest the ball, behind the carrier
+    place(sim, 5, 0, 14);
+    place(sim, 6, -10, -14);
+    place(sim, T + 3, 4, 0);
+    giveBall(sim, T + 3);
+    sim.players[T + 3].protect = 0;
+    sim.assignControl(true);
+    return sim;
+  }
+
+  it('touching the ball carrier wins the ball', () => {
+    const sim = defend();
+    // A second (idle) human carries the ball, so it isn't passed away the moment I arrive.
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    expect(me).toBe(4);
+    place(sim, me, 4, -1.0);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(me);
+  });
+
+  it('a touch you can see wins it: the drawn discs just meeting is enough', () => {
+    const sim = defend();
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    // 1.5 m apart: the 0.78 m discs on screen overlap, the 0.6 m bodies don't quite.
+    place(sim, me, 4, -1.5);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(me);
+  });
+
+  it('after a steal the loser just stops (no shove) and I dribble away from them', () => {
+    const sim = defend();
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    const them = T + 3;
+    place(sim, me, 4, -1.0);
+    sim.players[them].vy = -5; // running at me
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(me);
+    expect(Math.hypot(sim.players[them].vx, sim.players[them].vy)).toBeLessThan(0.5);
+    // I run off, they chase me: still mine, and I get away.
+    const dist = () => Math.hypot(sim.players[me].x - sim.players[them].x, sim.players[me].y - sim.players[them].y);
+    const before = dist();
+    for (let t = 0; t < 20; t++) {
+      sim.step(
+        new Map([
+          [0, { ...NO_INPUT, mx: 0, my: -0.9 }],
+          [1, { ...NO_INPUT, mx: 0, my: -0.9 }],
+        ]),
+      );
+      expect(sim.ball.owner).toBe(me);
+    }
+    expect(dist()).toBeGreaterThan(before + 1);
+    // Once the moment is over, touching me takes it back again (their teammates stay out of it).
+    for (let t = 0; t < 60; t++) {
+      for (let j = T + 1; j < 2 * T; j++) if (j !== them) place(sim, j, -18, 28 - (j - T) * 3);
+      sim.step(new Map([[0, NO_INPUT]]));
+    }
+    place(sim, them, sim.players[me].x, sim.players[me].y - 1.25);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(them);
+  });
+
+  it('I take the ball and run straight on through them: it never sticks between us', () => {
+    const sim = defend();
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    const them = T + 3;
+    place(sim, me, 4, -1.0);
+    sim.step(new Map([[0, { ...NO_INPUT, my: 0.9 }]]));
+    expect(sim.ball.owner).toBe(me);
+    for (let t = 0; t < 30; t++) {
+      sim.step(new Map([[0, { ...NO_INPUT, my: 0.9 }]]));
+      expect(sim.ball.owner).toBe(me);
+    }
+    // Out the other side, the ball in front of me.
+    expect(sim.players[me].y).toBeGreaterThan(sim.players[them].y + 1.5);
+    expect(sim.ball.y).toBeGreaterThan(sim.players[me].y);
+  });
+
+  it('the loser can not win it back while still leaning on me, only after stepping away', () => {
+    const sim = defend();
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    const them = T + 3;
+    place(sim, me, 4, -1.0);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(me);
+    // Two seconds glued to me (long past every guard): still my ball. Their teammates stay out of it.
+    for (let t = 0; t < 120; t++) {
+      place(sim, them, sim.players[me].x, sim.players[me].y - 1.25);
+      for (let j = T + 1; j < 2 * T; j++) if (j !== them) place(sim, j, -18, 28 - (j - T) * 3);
+      sim.step(new Map([[0, NO_INPUT]]));
+      expect(sim.ball.owner).toBe(me);
+    }
+    // They step off, then come in again: now the touch wins it.
+    place(sim, them, sim.players[me].x, sim.players[me].y - 4);
+    sim.step(new Map([[0, NO_INPUT]]));
+    place(sim, them, sim.players[me].x, sim.players[me].y - 1.25);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(them);
+  });
+
+  it('a player who just picked up the ball loses it to a touch almost at once', () => {
+    const sim = defend();
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    sim.players[T + 3].protect = 0.2; // just picked up
+    place(sim, me, 4, -1.0);
+    let t = 0;
+    while (sim.ball.owner !== me && t++ < 20) sim.step(new Map([[0, NO_INPUT]]));
+    expect(t).toBeLessThanOrEqual(13);
+  });
+
+  it('tap PASS: switch to the player nearest the ball (the next one if that is me)', () => {
+    const sim = defend();
+    sim.players[T + 3].protect = 100; // nobody wins the ball during this test
+    const h = sim.humans.get(0)!;
+    expect(h.controlled).toBe(4);
+    const tap = () => {
+      sim.step(new Map([[0, { ...NO_INPUT, pass: true }]]));
+      sim.step(new Map([[0, NO_INPUT]]));
+    };
+    tap();
+    expect(h.controlled).toBe(3);
+    // Control stays where I put it for a moment instead of snapping back.
+    for (let t = 0; t < 30; t++) sim.step(new Map([[0, NO_INPUT]]));
+    expect(h.controlled).toBe(3);
+    // Tapping again goes back to the nearest.
+    tap();
+    expect(h.controlled).toBe(4);
+  });
+
+  it('hold PASS: my player sprints at the ball', () => {
+    const sim = defend();
+    sim.players[T + 3].protect = 100;
+    const h = sim.humans.get(0)!;
+    for (let t = 0; t < 30; t++) sim.step(new Map([[0, { ...NO_INPUT, pass: true }]]));
+    // Holding doesn't switch: the same player chases.
+    expect(h.controlled).toBe(4);
+    const me = sim.players[4];
+    const b = sim.ball;
+    const d = Math.hypot(b.x - me.x, b.y - me.y);
+    const sp = Math.hypot(me.vx, me.vy);
+    expect(me.sprinting).toBe(true);
+    expect(sp).toBeGreaterThan(7);
+    expect(((b.x - me.x) * me.vx + (b.y - me.y) * me.vy) / (d * sp)).toBeGreaterThan(0.8);
   });
 });
 
@@ -173,7 +564,7 @@ describe('human keeper dives with the stick', () => {
     sim.addHuman(0, 0, 'keeper side');
     sim.state = 'play';
     // Opponent shoots at team 0's goal.
-    const shooter = 11;
+    const shooter = T + 5;
     place(sim, shooter, 0, -12);
     giveBall(sim, shooter);
     expect(sim.shoot(shooter, 1, false, 0.8)).toBe(true);
@@ -199,8 +590,8 @@ describe('computer vs computer', () => {
           if (e.type === 'pass') passes++;
         }
         expect(Number.isFinite(sim.ball.x) && Number.isFinite(sim.ball.y)).toBe(true);
-        expect(Math.abs(sim.ball.x)).toBeLessThanOrEqual(20.01);
-        expect(Math.abs(sim.ball.y)).toBeLessThanOrEqual(30.01);
+        expect(Math.abs(sim.ball.x)).toBeLessThanOrEqual(HALF_W + 0.01);
+        expect(Math.abs(sim.ball.y)).toBeLessThanOrEqual(HALF_L + 0.01);
       }
       expect(sim.state).toBe('ended');
     }

@@ -1,18 +1,20 @@
-// Shared 6v6 types and pitch geometry (metres).
+// Shared 7v7 types and pitch geometry (metres).
 // Team 0 defends y = -HALF_L and attacks +y. Team 1 the opposite.
 
 import type { Zone } from '../duel/goal';
 
-export const HALF_W = 20;
-export const HALF_L = 30;
+export const HALF_W = 22;
+export const HALF_L = 33;
 export const GOAL_HALF = 3;
 export const BOX_HALF_W = 9;
 export const BOX_DEPTH = 8;
 export const SIX_HALF_W = 5;
 export const SIX_DEPTH = 3.5;
 export const PLAYER_R = 0.6;
+/** Radius players are drawn at (bigger than PLAYER_R so they read on a phone). Discs that look touching are touching. */
+export const DISC_R = 0.78;
 export const BALL_R = 0.25;
-export const PLAYERS_PER_TEAM = 6;
+export const PLAYERS_PER_TEAM = 7;
 export const TICK_HZ = 60;
 export const DT = 1 / TICK_HZ;
 
@@ -22,7 +24,7 @@ export type ShotArea = 'own' | 'long' | 'danger' | 'impossible';
 
 export interface Player {
   team: Team;
-  /** 0 = goalkeeper, 1..5 field players. */
+  /** 0 = goalkeeper, 1..6 field players. */
   role: number;
   x: number;
   y: number;
@@ -35,6 +37,8 @@ export interface Player {
   /** Seconds this player cannot tackle / be tackled. */
   tackleCd: number;
   protect: number;
+  /** Seconds this player is off balance (just lost the ball): no control. */
+  stun: number;
   /** Human slot controlling this player, or -1 for AI. */
   human: number;
 }
@@ -44,8 +48,11 @@ export interface Ball {
   y: number;
   vx: number;
   vy: number;
-  /** Height above ground (only used for shots, for drawing). */
+  /** Height above ground (lofted passes and shots). */
   z: number;
+  vz: number;
+  /** A lofted ball that hasn't come down yet: nobody can touch it until it lands. */
+  flying: boolean;
   owner: number;
   lastTouch: number;
   /** Intended receiver of a pass in flight, or -1. */
@@ -98,6 +105,24 @@ export const FIREBALL = 0.98;
 export function chargeToPower(seconds: number): number {
   return MIN_SHOT_POWER + (1 - MIN_SHOT_POWER) * Math.min(1, seconds / CHARGE_TIME);
 }
+
+/** Holding PASS longer than this starts filling the long-ball meter (shorter = a plain tap). */
+export const PASS_TAP = 0.18;
+/** Seconds of holding PASS to fill the meter. Released full = lofted long ball, otherwise a ground pass. */
+export const PASS_CHARGE_TIME = 0.8;
+
+/** Long-ball meter 0..1 after holding PASS for `seconds`. */
+export function passCharge(seconds: number): number {
+  return Math.min(1, Math.max(0, seconds - PASS_TAP) / (PASS_CHARGE_TIME - PASS_TAP));
+}
+
+/** Whether PASS held for `seconds` fills the meter: a long ball. */
+export function isLongBall(seconds: number): boolean {
+  return passCharge(seconds) >= 0.999;
+}
+
+/** A long ball looks for the teammate that way whose distance best matches this (metres): the far one. */
+export const LONG_BALL_RANGE = 40;
 
 export const NO_INPUT: Input = { mx: 0, my: 0, pass: false, shoot: false, dive: -1 };
 

@@ -1,5 +1,5 @@
 // Decides what happens to a single penalty: shot point + keeper dive -> outcome.
-// Shared by Penalty Run and by every shot in a 6v6 match.
+// Shared by Penalty Run and by every shot in a 7v7 match.
 
 import { BALL_R, dist, GOAL_H, GOAL_HALF_W, PENALTY_DIST, type Point } from './goal';
 

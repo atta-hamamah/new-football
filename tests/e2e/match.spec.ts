@@ -18,7 +18,17 @@ test('vs computer: kick off, move, pass, clock runs', async ({ page }) => {
   await openMatchMenu(page);
   await page.click('#play-cpu');
   await expect(page.locator('.mboard')).toBeVisible();
-  await expect.poll(async () => (await view(page))?.state, { timeout: 5000 }).toBe('play');
+  // We kick off: after the whistle, tap PASS to play the ball to the teammate beside us.
+  await expect(page.locator('.kick-hint')).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        await page.keyboard.press('j');
+        return (await view(page))?.state;
+      },
+      { timeout: 5000 },
+    )
+    .toBe('play');
   const before = (await view(page))!;
   // Keyboard: run towards the goal (to the right), then pass.
   await page.keyboard.down('d');
@@ -56,6 +66,16 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
 
   await hostPage.click('#start-match');
   await expect(joinPage.locator('.mboard')).toBeVisible({ timeout: 5000 });
+  // The host's team kicks off: tap PASS.
+  await expect
+    .poll(
+      async () => {
+        await hostPage.keyboard.press('j');
+        return (await view(hostPage))?.state;
+      },
+      { timeout: 15000 },
+    )
+    .toBe('play');
   await expect.poll(async () => (await view(joinPage))?.state, { timeout: 15000 }).toBe('play');
 
   // Sam (red) holds "right" on his screen: towards the goal red attacks.
