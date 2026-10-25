@@ -81,6 +81,8 @@ test('7v7 vs computer: charge, fireball, save', async ({ browser }) => {
   await shot(page, '10-match-full-charge', true);
   await page.keyboard.down('w'); // aim: top post
   await page.waitForTimeout(80);
+  // Shots are quick (a fireball is ~0.3 s): slow the clock so the mid-flight moment can't be skipped.
+  await page.evaluate(() => ((window as unknown as Hooks).__game.stage.app.ticker.speed = 0.25));
   await page.keyboard.up('k');
   await until(page, () => {
     const v = (window as unknown as Hooks).__match.view;

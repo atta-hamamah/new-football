@@ -462,15 +462,37 @@ describe('defending', () => {
     expect(sim.ball.owner).toBe(them);
   });
 
-  it('a player who just picked up the ball loses it to a touch almost at once', () => {
+  it('picking up a loose ball also gives half a second to get away, then a touch wins it', () => {
     const sim = defend();
     sim.addHuman(1, 1, 'them');
     const me = sim.humans.get(0)!.controlled;
-    sim.players[T + 3].protect = 0.2; // just picked up
+    // The ball runs loose at their feet; I'm right there too.
+    Object.assign(sim.ball, { owner: -1, x: 4, y: 0, vx: 0, vy: 0, lastTouch: me });
     place(sim, me, 4, -1.0);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(T + 3);
     let t = 0;
-    while (sim.ball.owner !== me && t++ < 20) sim.step(new Map([[0, NO_INPUT]]));
-    expect(t).toBeLessThanOrEqual(13);
+    while (sim.ball.owner !== me && t++ < 60) sim.step(new Map([[0, NO_INPUT]]));
+    expect(t).toBeGreaterThanOrEqual(28);
+    expect(t).toBeLessThanOrEqual(32);
+  });
+
+  it('the loser of a tackle can not intercept the pass the winner plays straight away', () => {
+    const sim = defend();
+    sim.addHuman(1, 1, 'them');
+    const me = sim.humans.get(0)!.controlled;
+    const them = T + 3;
+    place(sim, me, 4, -1.0);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(me);
+    // I pass at once, right through where they stand.
+    place(sim, 5, 4, 14);
+    sim.pass(me, 0, 1, 5);
+    for (let t = 0; t < 20 && sim.ball.owner < 0; t++) {
+      place(sim, them, sim.ball.x, sim.ball.y);
+      sim.step(new Map([[0, NO_INPUT]]));
+    }
+    expect(sim.ball.owner).not.toBe(them);
   });
 
   it('tap PASS: switch to the player nearest the ball (the next one if that is me)', () => {
@@ -535,8 +557,13 @@ describe('charged shots', () => {
     expect(full.chargeOf(full.humans.get(0)!.controlled)).toBe(-1);
     hold(full, 60, {});
     expect(full.duel!.power).toBe(1);
-    // Harder shots reach the goal sooner and leave the keeper less time.
+    // Harder shots reach the goal sooner and leave the keeper less time: a full charge about twice as fast.
     expect(full.duel!.ticks).toBeLessThan(tap.duel!.ticks);
+    expect(tap.duel!.ticks).toBeGreaterThan(full.duel!.ticks * 1.6);
+    const half = ready();
+    hold(half, 30, {});
+    expect(half.duel!.ticks).toBeLessThan(tap.duel!.ticks);
+    expect(half.duel!.ticks).toBeGreaterThan(full.duel!.ticks);
     expect(full.duel!.window).toBeLessThan(tap.duel!.window);
   });
 
@@ -555,6 +582,47 @@ describe('charged shots', () => {
     for (let t = 0; t < 27; t++) sim.step(new Map([[0, { ...NO_INPUT, shoot: true }]]));
     expect(sim.chargeOf(me)).toBeGreaterThan(0.4);
     expect(sim.chargeOf(me)).toBeLessThan(0.6);
+  });
+
+  it('SHOOT while my pass is on its way: the receiver strikes it first time, before controlling it', () => {
+    const sim = ready();
+    const me = sim.humans.get(0)!.controlled;
+    const mate = [1, 2, 3, 4, 5, 6].find((j) => j !== me)!;
+    place(sim, mate, 2, 18);
+    sim.pass(me, 0, 0, mate);
+    // Tap SHOOT straight after passing: control jumps to the receiver and the shot waits for the ball.
+    sim.step(new Map([[0, { ...NO_INPUT, shoot: true }]]));
+    expect(sim.humans.get(0)!.controlled).toBe(mate);
+    sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.state).toBe('play');
+    let t = 0;
+    while (sim.state === 'play' && t++ < 120) sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.state).toBe('duel');
+    expect(sim.duel!.shooter).toBe(mate);
+    // Struck before the receiver could have picked the pass up.
+    expect(Math.hypot(sim.duel!.sx - sim.players[mate].x, sim.duel!.sy - sim.players[mate].y)).toBeGreaterThan(1.15);
+  });
+});
+
+describe('keeper with the ball', () => {
+  it('a caught ball is safe: an opponent on top of the keeper can not take it or cut out the throw', () => {
+    const sim = new MatchSim(cfg);
+    sim.state = 'play';
+    const keeper = 0;
+    place(sim, keeper, 0, -HALF_L + 1.4);
+    Object.assign(sim.ball, { owner: keeper, lastTouch: keeper, passTarget: -1 });
+    sim.keeperHold = 0;
+    for (let t = 0; t < 90; t++) {
+      place(sim, T + 5, sim.players[keeper].x + 0.5, sim.players[keeper].y + 0.5);
+      sim.step();
+      if (sim.ball.owner === keeper) continue;
+      // Released: the throw goes over the opponent standing in front.
+      expect(sim.ball.owner).toBe(-1);
+      expect(sim.ball.flying).toBe(true);
+      break;
+    }
+    expect(sim.ball.owner).not.toBe(T + 5);
+    expect(sim.ball.passTarget).toBeGreaterThan(0);
   });
 });
 

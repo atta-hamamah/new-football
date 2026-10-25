@@ -35,37 +35,37 @@ import {
 
 export const WALK = 6.9;
 export const SPRINT = 10.3;
-/** A sprint with the ball is this much slower. */
-export const DRIBBLE_MULT = 0.88;
+/** A sprint with the ball is this much slower: a defender without it can catch the carrier. */
+export const DRIBBLE_MULT = 0.8;
 /** Top speed of your player when not sprinting (the computer moves at WALK)... */
 export const JOG = 8.5;
 /** ...and with the ball: slower, but still under a sprint with it. */
-export const DRIBBLE_JOG = 7.6;
+export const DRIBBLE_JOG = 7.2;
 /** How fast (rad/s) a sprint can turn: wider than walking, which turns at once. Wider still with the ball. */
 const SPRINT_TURN = 4.5;
 const SPRINT_TURN_BALL = 3;
 const PICKUP = 1.15;
 /** Touching the ball carrier takes the ball: as soon as the drawn discs meet, so what you see is what counts. */
 const TACKLE = DISC_R * 2 + 0.1;
-/** After a steal: the winner can't be tackled for this long (seconds). */
+/** Whoever wins the ball (a tackle or picking it up) can't be tackled for this long (seconds): time to get away. */
 const STEAL_GUARD = 0.5;
 /**
- * The loser can't tackle for this long, and not at all until they have stepped off the winner:
- * otherwise the two stay touching and the ball flips straight back.
+ * The loser can't touch the ball (tackle or pick it up) for this long, and can't tackle at all until
+ * they have stepped off the winner: otherwise the two stay touching and the ball flips straight back.
  */
 const RETACKLE = 0.5;
 /** The player who lost the ball stops dead with no control for this long (seconds), so the winner gets away. */
 const STUN = 0.35;
-/** Seconds a player who just picked up a loose ball can't be tackled. */
-const PICKUP_GUARD = 0.2;
 /** Rolling friction: dv/dt = -(FRICTION_K * v + FRICTION_C). */
 const FRICTION_K = 0.6;
 const FRICTION_C = 3.2;
 const GRAVITY = 12;
 /** Every ground pass travels at this speed (m/s), whatever the distance, until someone takes it. */
-export const PASS_SPEED = 16;
+export const PASS_SPEED = 17.5;
 /** Control moves from the passer to the receiver this many seconds before the ball gets there. */
 const SWITCH_BEFORE = 0.3;
+/** A first-time shot is struck as soon as the incoming pass is this close to the receiver (m): before it is controlled. */
+const STRIKE_REACH = 1.8;
 /** How fast (rad/s) a long ball bends towards its receiver while in the air. */
 const HOMING = 1.6;
 /** Holding PASS without the ball for longer than this makes your player chase it. */
@@ -93,6 +93,8 @@ export interface Human {
   passHold: number;
   /** Whether the held PASS started on the ball (a pass on release) or off it (switch / chase). */
   passWithBall: boolean;
+  /** A shot let go while our pass was still coming: struck first time when the ball arrives. */
+  strike: { col: -1 | 0 | 1; high: boolean; power: number } | null;
   /** Seconds during which control won't switch on its own (after a manual switch). */
   lockSwitch: number;
   wasChasing: boolean;
@@ -177,6 +179,7 @@ export class MatchSim {
       charge: -1,
       passHold: -1,
       passWithBall: false,
+      strike: null,
       lockSwitch: 0,
       wasChasing: false,
     });
@@ -462,9 +465,10 @@ export class MatchSim {
     const ty = attackGoalY(p.team);
     const defending = (1 - p.team) as Team;
     // Real time: harder shots arrive sooner and leave less time to react.
-    const speed = 26 + 34 * power;
+    // More charge, more speed: a tap (power 0.3) about 22 m/s, a full charge about 46 m/s.
+    const speed = 12 + 34 * power;
     const dist = Math.hypot(tx - this.ball.x, ty - this.ball.y);
-    const ticks = Math.round(Math.max(14, Math.min(34, (dist / speed) * 60)));
+    const ticks = Math.round(Math.max(10, Math.min(48, (dist / speed) * 60)));
     this.duel = {
       shooter: i,
       team: p.team,
@@ -477,7 +481,7 @@ export class MatchSim {
       tick: 0,
       power,
       ticks,
-      window: Math.max(11, Math.round(ticks * 0.75)),
+      window: Math.min(ticks, Math.max(11, Math.round(ticks * 0.75))),
       dive: undefined,
       keeperHuman: this.teamHasHuman(defending),
       outcome: null,
@@ -570,8 +574,17 @@ export class MatchSim {
       const passReleased = !inp.pass && h.prev.pass;
       const shootPressed = inp.shoot && !h.prev.shoot;
       h.lockSwitch = Math.max(0, h.lockSwitch - DT);
+      const b = this.ball;
+      // Our ground pass on its way: SHOOT takes the receiver at once, for a first-time shot.
+      const ours = !kickoff && b.owner < 0 && b.passTarget >= 0 && this.teamOf(b.passTarget) === h.team;
+      const rq = ours ? this.players[b.passTarget] : null;
+      if (rq && shootPressed && h.passHold < 0 && rq.role !== 0 && (rq.human < 0 || rq.human === h.slot)) {
+        this.setControl(h, b.passTarget);
+      }
       const i = h.controlled;
       if (i < 0) continue;
+      const receiving = ours && b.passTarget === i;
+      if (!receiving) h.strike = null;
       // PASS acts on release: a tap and a hold mean different things.
       const held = h.passHold;
       if (passPressed && h.charge < 0) {
@@ -579,8 +592,20 @@ export class MatchSim {
         h.passWithBall = this.ball.owner === i;
       } else if (inp.pass && h.passHold >= 0) h.passHold += DT;
       else if (!inp.pass) h.passHold = -1;
-      if (this.ball.owner !== i) h.charge = -1;
-      if (this.ball.owner === i) {
+      if (this.ball.owner !== i && !receiving) h.charge = -1;
+      if (receiving) {
+        // Charge while the pass comes in. Released before it arrives: struck first time (see firstTimeStrike).
+        if (shootPressed && h.passHold < 0) {
+          h.charge = 0;
+          h.strike = null;
+        } else if (h.charge >= 0 && inp.shoot) {
+          h.charge += DT;
+        } else if (h.charge >= 0 && !inp.shoot) {
+          const col = inp.mx > 0.35 ? 1 : inp.mx < -0.35 ? -1 : 0;
+          h.strike = { col, high: Math.hypot(inp.mx, inp.my) >= SPRINT_AT, power: chargeToPower(h.charge) };
+          h.charge = -1;
+        }
+      } else if (this.ball.owner === i) {
         if (passReleased && held >= 0 && h.passWithBall && h.charge < 0) {
           // Ground pass, unless PASS was held until the meter filled: then a long ball.
           this.pass(i, inp.mx, inp.my, -1, isLongBall(held));
@@ -848,6 +873,7 @@ export class MatchSim {
 
     // A long ball in the air can't be touched by anyone, teammates and keepers too, until it lands.
     if (b.flying) return;
+    if (this.firstTimeStrike()) return;
     // Pick-up: the nearest player who is close enough and allowed. A pass is only for its receiver or an opponent.
     let best = -1;
     let bestD = PICKUP;
@@ -869,11 +895,31 @@ export class MatchSim {
       b.owner = best;
       b.passTarget = -1;
       b.lastTouch = best;
-      this.players[best].protect = PICKUP_GUARD;
+      this.players[best].protect = STEAL_GUARD;
+      // Whoever has the ball can always run with it.
+      this.players[best].stun = 0;
       if (this.players[best].role === 0) this.keeperHold = 0;
       this.stickBall();
       this.assignControl(true);
     }
+  }
+
+  /** A receiver who already let go of SHOOT hits the pass first time as it reaches them. Returns true if shot. */
+  private firstTimeStrike(): boolean {
+    const b = this.ball;
+    if (b.passTarget < 0) return false;
+    const q = this.players[b.passTarget];
+    const h = q.human >= 0 ? this.humans.get(q.human) : undefined;
+    if (!h || !h.strike || h.controlled !== b.passTarget) return false;
+    if (Math.hypot(q.x - b.x, q.y - b.y) > STRIKE_REACH) return false;
+    const s = h.strike;
+    h.strike = null;
+    // Too far out to shoot: they just take the ball as usual.
+    if (!this.shoot(b.passTarget, s.col, s.high, s.power)) {
+      this.emit({ type: 'bounce' });
+      return false;
+    }
+    return true;
   }
 
   private tackles(): void {
@@ -895,10 +941,13 @@ export class MatchSim {
         this.ball.owner = i;
         this.ball.lastTouch = i;
         p.protect = STEAL_GUARD;
+        // The loser can't touch the ball for a moment (no tackle, no picking up a pass): the winner gets away.
         owner.tackleCd = RETACKLE;
+        this.noPickup[o] = RETACKLE;
         owner.vx = 0;
         owner.vy = 0;
         owner.stun = STUN;
+        p.stun = 0;
         // The winner turns away with the ball instead of leaving it at the loser's feet.
         // If they keep running at the loser, they go straight through (see movePlayers).
         const d = Math.hypot(p.x - owner.x, p.y - owner.y) || 1;
@@ -933,9 +982,20 @@ export class MatchSim {
           best = j;
         }
       }
-      // Far teammates get a lofted ball over the press.
-      const far = Math.hypot(this.players[best].x - this.players[o].x, this.players[best].y - this.players[o].y) > 20;
-      this.pass(o, 0, 0, best, far);
+      // Far teammates get a lofted ball over the press, and so does anyone when an opponent could cut out
+      // a ball rolled along the ground: a save stays ours until the keeper's throw comes down.
+      const k = this.players[o];
+      const q = this.players[best];
+      const far = Math.hypot(q.x - k.x, q.y - k.y) > 20;
+      const lx = q.x - k.x;
+      const ly = q.y - k.y;
+      const ll = lx * lx + ly * ly || 1;
+      const inTheWay = this.players.some((e) => {
+        if (e.team === k.team) return false;
+        const s = Math.max(0, Math.min(1, ((e.x - k.x) * lx + (e.y - k.y) * ly) / ll));
+        return Math.hypot(e.x - k.x, e.y - k.y) < 7 || Math.hypot(k.x + lx * s - e.x, k.y + ly * s - e.y) < 3;
+      });
+      this.pass(o, 0, 0, best, far || inTheWay);
       this.keeperHold = 0;
     }
   }

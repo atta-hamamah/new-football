@@ -158,8 +158,10 @@ export function aiThink(sim: MatchSim, i: number, formationOnly: boolean): AiMov
         const dl = Math.hypot(dx, dy) || 1;
         target = { x: o.x + (dx / dl) * 0.5, y: o.y + (dy / dl) * 0.5 };
         const d = Math.hypot(o.x - p.x, o.y - p.y);
-        // Close down fast, then jockey: gives the carrier a moment to pass.
-        speed = d > 2.5 ? SPRINT : WALK * [0.8, 0.9, 1.0][diff];
+        // Close down fast, then jockey: gives the carrier a moment to pass. A human running off is chased
+        // a little faster than they go, so they can't simply outrun the presser.
+        const chase = o.human >= 0 ? Math.min(SPRINT, Math.hypot(o.vx, o.vy) + 0.8) : 0;
+        speed = d > 2.5 ? SPRINT : Math.max(WALK * [0.8, 0.9, 1.0][diff], chase);
       } else if (closestOutfield(sim, team, o.x, o.y, presser) === i) {
         const gy = team === 0 ? -HALF_L : HALF_L;
         target = { x: o.x * 0.6, y: o.y + (gy - o.y) * 0.3 };
