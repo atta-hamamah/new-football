@@ -4,8 +4,11 @@ import type { Scene, Stage } from '../render/app';
 import { MatchScene, type TeamKit } from '../render/matchScene';
 import { haptic, sfx } from '../ui/audio';
 import { banner, h, hex, root } from '../ui/dom';
+import { save, store } from '../ui/save';
 import { Controls } from './controls';
+import { pauseMenu } from './pauseMenu';
 import type { Session } from './session';
+import { TACTICS } from './tactics';
 import { FIREBALL, type MatchEvent, type Team } from './types';
 import type { ViewState } from './view';
 
@@ -26,6 +29,7 @@ export class MatchMode implements Scene {
   private lostShown = false;
   private quitting = false;
   private endPanel: HTMLElement | null = null;
+  private menu: HTMLElement | null = null;
 
   constructor(
     private readonly stage: Stage,
@@ -38,7 +42,47 @@ export class MatchMode implements Scene {
     this.controls = new Controls(session.myTeam === 0 ? 1 : -1);
     this.hud = h('div', { class: 'match-hud' });
     root().append(this.controls.el, this.hud);
+    window.addEventListener('keydown', this.onKey);
     sfx.ambience(true);
+  }
+
+  private readonly onKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape' && e.key.toLowerCase() !== 'p') return;
+    if (this.menu) this.closeMenu();
+    else this.openMenu();
+  };
+
+  /** The pause menu: tactics, resume, quit. Against the computer the match stops; on Wi-Fi it goes on. */
+  private openMenu(): void {
+    if (this.menu || this.endShown || this.quitting) return;
+    sfx.click();
+    this.session.paused = this.session.canPause;
+    const me = this.session.myTeam;
+    this.menu = pauseMenu({
+      paused: this.session.canPause,
+      current: this.lastView?.tactics[me] ?? 'balanced',
+      color: KITS[me].color,
+      onPick: (t) => {
+        sfx.click();
+        haptic(10);
+        this.session.setTactic(t);
+        save.tactic = t;
+        store(save);
+      },
+      onResume: () => this.closeMenu(),
+      onQuit: () => this.quit(),
+    });
+    root().appendChild(this.menu);
+  }
+
+  private closeMenu(): void {
+    if (!this.menu) return;
+    sfx.click();
+    this.menu.remove();
+    this.menu = null;
+    this.session.paused = false;
+    const t = this.lastView ? TACTICS[this.lastView.tactics[this.session.myTeam]] : null;
+    if (t) void banner(t.name.toUpperCase(), 'neutral', 'Tactics', 700);
   }
 
   get root() {
@@ -75,7 +119,8 @@ export class MatchMode implements Scene {
       this.lostShown = true;
       void banner('Connection lost', 'bad', this.session.lost, 2500).then(() => this.quit());
     }
-    this.scene.update(dt);
+    // Paused: the picture holds still too.
+    this.scene.update(this.session.paused ? 0 : dt);
   }
 
   private onEvent(e: MatchEvent, v: ViewState): void {
@@ -135,8 +180,11 @@ export class MatchMode implements Scene {
       );
     const els = { left: h('span', {}, '0'), right: h('span', {}, '0'), clock: h('div', { class: 'mclock glass' }) };
     // My team is always shown on the left (it attacks to the right).
+    const pause = h('button', { class: 'icon-btn glass', id: 'pause', title: 'Pause · tactics', onclick: () => this.openMenu() });
+    pause.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>';
     this.hud.replaceChildren(
-      h('button', { class: 'icon-btn glass', onclick: () => this.quit() }, '✕'),
+      pause,
       h(
         'div',
         { class: 'mboard glass' },
@@ -173,6 +221,9 @@ export class MatchMode implements Scene {
   }
 
   private showEnd(v: ViewState): void {
+    // On Wi-Fi the clock runs on behind the menu: full time closes it.
+    this.menu?.remove();
+    this.menu = null;
     this.endShown = true;
     const me = this.session.myTeam;
     const mine = v.score[me];
@@ -224,9 +275,11 @@ export class MatchMode implements Scene {
   }
 
   destroy(): void {
+    window.removeEventListener('keydown', this.onKey);
     this.session.close();
     this.controls.destroy();
     this.hud.remove();
+    this.menu?.remove();
     this.endPanel?.remove();
     sfx.ambience(false);
     this.scene.destroy();

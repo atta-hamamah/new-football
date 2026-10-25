@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MatchSim, PASS_SPEED, resolveDuel } from '../../src/match/sim';
+import { type Tactic, TACTIC_IDS } from '../../src/match/tactics';
 import { HALF_L, HALF_W, type Input, NO_INPUT, PASS_CHARGE_TIME, PLAYERS_PER_TEAM, shotArea } from '../../src/match/types';
 
 const cfg = { duration: 60, difficulty: 1, seed: 7 };
@@ -601,6 +602,123 @@ describe('charged shots', () => {
     expect(sim.duel!.shooter).toBe(mate);
     // Struck before the receiver could have picked the pass up.
     expect(Math.hypot(sim.duel!.sx - sim.players[mate].x, sim.duel!.sy - sim.players[mate].y)).toBeGreaterThan(1.15);
+  });
+});
+
+describe('off the ball: roles and tactics', () => {
+  /** I stand on the ball in midfield (nobody can take it); my teammates take up the tactic's shape. */
+  function settle(tactic: Tactic, ticks = 200) {
+    const sim = new MatchSim({ ...cfg, seed: 11 });
+    sim.addHuman(0, 0, 'you');
+    sim.setTactic(0, tactic);
+    sim.state = 'play';
+    const me = 6;
+    place(sim, me, -2, -4);
+    giveBall(sim, me);
+    sim.players[me].protect = 99;
+    sim.assignControl(true);
+    for (let t = 0; t < ticks; t++) sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.ball.owner).toBe(me);
+    const mates = [1, 2, 3, 4, 5].map((r) => sim.players[r]);
+    return { sim, me: sim.players[me], mates };
+  }
+
+  it('spread out over the pitch: nobody on top of anyone, nobody hugging a line, width on both sides', () => {
+    for (const t of TACTIC_IDS) {
+      const { me, mates } = settle(t);
+      const all = [me, ...mates];
+      for (let a = 0; a < all.length; a++)
+        for (let b = a + 1; b < all.length; b++) expect(Math.hypot(all[a].x - all[b].x, all[a].y - all[b].y)).toBeGreaterThan(4);
+      for (const p of mates) {
+        expect(Math.abs(p.x)).toBeLessThan(HALF_W - 2);
+        expect(Math.abs(p.y)).toBeLessThan(HALF_L - 3);
+      }
+      expect(mates.some((p) => p.x < -7)).toBe(true);
+      expect(mates.some((p) => p.x > 7)).toBe(true);
+    }
+  });
+
+  it('each number plays its role: 2 and 3 stay behind the ball on their own sides, 7 leads the line', () => {
+    for (const t of TACTIC_IDS) {
+      const { sim, me } = settle(t);
+      const [lb, rb, lw, rw, st] = [1, 2, 3, 4, 5].map((r) => sim.players[r]);
+      expect(lb.y).toBeLessThan(me.y);
+      expect(rb.y).toBeLessThan(me.y);
+      expect(lb.x).toBeLessThan(rb.x);
+      expect(lw.x).toBeLessThan(rw.x);
+      // The 7 is ahead of the ball and of the 4 (me) and both defenders (a winger may be past him on a run).
+      expect(st.y).toBeGreaterThan(me.y + 4);
+      expect(st.y).toBeGreaterThan(Math.max(lb.y, rb.y) + 8);
+    }
+  });
+
+  it('possession comes close to show for the ball; direct stretches the defence', () => {
+    const spread = (t: Tactic) => {
+      const { me, mates } = settle(t);
+      return {
+        near: mates.reduce((s, p) => s + Math.hypot(p.x - me.x, p.y - me.y), 0) / mates.length,
+        top: Math.max(...mates.map((p) => p.y)),
+      };
+    };
+    const pos = spread('possession');
+    const bal = spread('balanced');
+    const dir = spread('direct');
+    expect(pos.near).toBeLessThan(bal.near);
+    expect(bal.near).toBeLessThan(dir.near);
+    expect(pos.top).toBeLessThan(dir.top);
+  });
+
+  it('direct: forwards time runs in behind the defence when the man on the ball is free', () => {
+    const { sim } = settle('direct', 1);
+    let ran = false;
+    for (let t = 0; t < 360 && !ran; t++) {
+      sim.step(new Map([[0, NO_INPUT]]));
+      ran = [3, 4, 5].some((r) => sim.brain[r].run > 0);
+    }
+    expect(ran).toBe(true);
+  });
+
+  it('picking a tactic mid-match takes effect at once', () => {
+    const { sim, me, mates } = settle('possession');
+    const spread = () => mates.reduce((s, p) => s + Math.hypot(p.x - me.x, p.y - me.y), 0) / mates.length;
+    const before = spread();
+    sim.setTactic(0, 'direct');
+    for (let t = 0; t < 120; t++) sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.tactic[0]).toBe('direct');
+    expect(spread()).toBeGreaterThan(before + 2);
+  });
+
+  it('defending: the runner nearest our goal is marked goal-side', () => {
+    const sim = new MatchSim({ ...cfg, seed: 5 });
+    sim.addHuman(1, 1, 'them');
+    sim.state = 'play';
+    // They hold the ball in midfield (a human standing on it), their striker waits on the edge of our box.
+    const carrier = T + 6;
+    place(sim, carrier, 0, 2);
+    giveBall(sim, carrier);
+    sim.players[carrier].protect = 99;
+    sim.assignControl(true);
+    for (let t = 0; t < 150; t++) {
+      Object.assign(sim.players[T + 5], { x: 3, y: -20, vx: 0, vy: 0 });
+      sim.step(new Map([[1, NO_INPUT]]));
+    }
+    expect(sim.ball.owner).toBe(carrier);
+    const a = sim.players[T + 5];
+    const markers = [1, 2, 3, 4, 6].map((r) => sim.players[r]).filter((p) => Math.hypot(p.x - a.x, p.y - a.y) < 3.5);
+    expect(markers.some((p) => p.y < a.y)).toBe(true);
+  });
+
+  it('a computer team chases the game when behind late on, and keeps the ball when ahead', () => {
+    const sim = new MatchSim({ ...cfg, seed: 2 });
+    sim.addHuman(0, 0, 'you');
+    sim.state = 'play';
+    sim.clock = 50;
+    sim.score[0] = 1;
+    for (let t = 0; t < 61; t++) sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.tactic[1]).toBe('direct');
+    sim.score[1] = 2;
+    for (let t = 0; t < 61; t++) sim.step(new Map([[0, NO_INPUT]]));
+    expect(sim.tactic[1]).toBe('possession');
   });
 });
 

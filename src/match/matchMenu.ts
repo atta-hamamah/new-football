@@ -1,9 +1,11 @@
 import type { Stage } from '../render/app';
 import { sfx } from '../ui/audio';
 import { h, showScreen } from '../ui/dom';
+import { save } from '../ui/save';
 import { MatchMode } from './matchMode';
 import type { Session } from './session';
 import { LocalSession } from './session';
+import { isTactic } from './tactics';
 
 export let current: MatchMode | null = null;
 
@@ -62,7 +64,13 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
             h('div', { class: 'chips' }, ...chips),
             h(
               'button',
-              { class: 'btn big', id: 'play-cpu', onclick: go(() => playSession(stage, new LocalSession(difficulty), again)) },
+              {
+                class: 'btn big',
+                id: 'play-cpu',
+                onclick: go(() =>
+                  playSession(stage, new LocalSession(difficulty, 180, isTactic(save.tactic) ? save.tactic : 'balanced'), again),
+                ),
+              },
               'Kick off',
             ),
           ),
@@ -117,6 +125,16 @@ export function showMatchMenu(stage: Stage, back: () => void): void {
             'p',
             {},
             'Touch the man on the ball to win it: the ball moves away with you. PASS: tap = switch to the player nearest the ball, hold = chase the ball. When they shoot: push the stick toward the ball and tap a button to dive.',
+          ),
+        ),
+        h(
+          'div',
+          {},
+          h('b', {}, 'Tactics'),
+          h(
+            'p',
+            {},
+            'Pause (top left, or Esc) to pick how your team attacks: Balanced, Possession or Direct. Change it any time, even mid-match. SHOOT while your pass is on its way = a first-time shot.',
           ),
         ),
       ),

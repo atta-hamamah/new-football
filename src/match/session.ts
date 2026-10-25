@@ -2,6 +2,7 @@
 // network) and returns what to draw. Local play and Wi-Fi play share the same screen.
 
 import { MatchSim } from './sim';
+import type { Tactic } from './tactics';
 import { DT, type Input, type MatchEvent, type Team } from './types';
 import { type ViewState, viewFromSim } from './view';
 
@@ -17,6 +18,11 @@ export interface Session {
   close(): void;
   /** Set when the connection is lost (clients). */
   lost?: string;
+  /** Whether the match can stop for the pause menu (only against the computer: on Wi-Fi it goes on). */
+  readonly canPause: boolean;
+  paused: boolean;
+  /** Picks my team's attacking tactic (the view shows what each team is playing). */
+  setTactic(t: Tactic): void;
 }
 
 /** Most ticks run in one frame (0.25 s): more than a 5 fps frame needs (see Stage). */
@@ -58,12 +64,19 @@ export class LocalSession implements Session {
   readonly myTeam: Team = 0;
   readonly names = new Map<number, string>([[0, 'YOU']]);
   readonly canRestart = true;
+  readonly canPause = true;
+  paused = false;
   private readonly runner: SimRunner;
 
-  constructor(difficulty: number, duration = 180) {
+  constructor(
+    difficulty: number,
+    duration = 180,
+    public tactic: Tactic = 'balanced',
+  ) {
     this.runner = new SimRunner(() => {
       const sim = new MatchSim({ duration, difficulty, seed: (Math.random() * 2 ** 32) >>> 0 });
       sim.addHuman(0, 0, 'YOU');
+      sim.setTactic(0, this.tactic);
       return sim;
     });
   }
@@ -72,8 +85,13 @@ export class LocalSession implements Session {
     return this.runner.sim;
   }
 
+  setTactic(t: Tactic): void {
+    this.tactic = t;
+    this.runner.sim.setTactic(this.myTeam, t);
+  }
+
   update(dt: number, input: Input): { view: ViewState; events: MatchEvent[] } {
-    const events = this.runner.advance(dt, () => new Map([[0, input]]));
+    const events = this.paused ? [] : this.runner.advance(dt, () => new Map([[0, input]]));
     return { view: viewFromSim(this.runner.sim), events };
   }
 

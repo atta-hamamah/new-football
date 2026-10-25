@@ -1,7 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
 interface MatchHook {
-  view: { state: string; clock: number; score: number[]; players: { x: number; y: number; human: number; team: number }[] } | null;
+  view: {
+    state: string;
+    clock: number;
+    score: number[];
+    players: { x: number; y: number; human: number; team: number }[];
+    tactics: string[];
+  } | null;
 }
 // Landscape phones. Software-rendered CI browsers are slow at high resolutions, so 1x pixels.
 test.use({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
@@ -39,7 +45,24 @@ test('vs computer: kick off, move, pass, clock runs', async ({ page }) => {
   const after = (await view(page))!;
   expect(after.clock).toBeLessThan(before.clock);
   await page.screenshot({ path: 'test-results/match-cpu.png' });
-  await page.click('.match-hud .icon-btn');
+
+  // Pause: the clock stops, a tactic can be picked mid-match, and play goes on with it.
+  await page.click('#pause');
+  await expect(page.locator('.pause-menu')).toBeVisible();
+  const frozen = (await view(page))!.clock;
+  await page.waitForTimeout(500);
+  expect((await view(page))!.clock).toBe(frozen);
+  await page.click('#tactic-direct');
+  await expect(page.locator('#tactic-direct')).toHaveClass(/on/);
+  await page.screenshot({ path: 'test-results/match-pause.png' });
+  await page.click('#resume');
+  await expect(page.locator('.pause-menu')).toHaveCount(0);
+  await expect.poll(async () => (await view(page))!.tactics[0]).toBe('direct');
+  await expect.poll(async () => (await view(page))!.clock).toBeLessThan(frozen);
+
+  // Quit from the menu.
+  await page.keyboard.press('Escape');
+  await page.click('#quit');
   await expect(page.locator('#play-cpu')).toBeVisible();
 });
 
@@ -108,7 +131,16 @@ test('Wi-Fi: one phone hosts, another joins, both play the same match', async ({
   await joinPage.screenshot({ path: 'test-results/match-wifi-joiner.png' });
   await hostPage.screenshot({ path: 'test-results/match-wifi-host.png' });
 
+  // Sam picks red's tactic from his menu while the match goes on: the host plays it, both screens show it.
+  await joinPage.click('#pause');
+  await expect(joinPage.locator('.pause-head h3')).toHaveText('TACTICS');
+  await joinPage.click('#tactic-possession');
+  await expect.poll(async () => (await view(hostPage))!.tactics[1]).toBe('possession');
+  await expect.poll(async () => (await view(joinPage))!.tactics[1]).toBe('possession');
+  await joinPage.click('#resume');
+
   // Host quits: the joiner is told.
-  await hostPage.click('.match-hud .icon-btn');
+  await hostPage.click('#pause');
+  await hostPage.click('#quit');
   await expect(joinPage.locator('.banner', { hasText: 'Connection lost' })).toHaveCount(1, { timeout: 5000 });
 });

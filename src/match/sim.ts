@@ -3,7 +3,8 @@
 
 import { Rng } from '../core/rng';
 import { type Zone, ZONES } from '../duel/goal';
-import { aiThink } from './ai';
+import { aiThink, type Brain, newBrain, newPlan, type TeamPlan } from './ai';
+import type { Tactic } from './tactics';
 import {
   attackGoalY,
   type Ball,
@@ -64,6 +65,8 @@ const GRAVITY = 12;
 export const PASS_SPEED = 17.5;
 /** Control moves from the passer to the receiver this many seconds before the ball gets there. */
 const SWITCH_BEFORE = 0.3;
+/** Seconds a computer player on the ball takes to control it before deciding what to do with it. */
+const FIRST_TOUCH = 0.35;
 /** A first-time shot is struck as soon as the incoming pass is this close to the receiver (m): before it is controlled. */
 const STRIKE_REACH = 1.8;
 /** How fast (rad/s) a long ball bends towards its receiver while in the air. */
@@ -135,6 +138,14 @@ export class MatchSim {
   readonly noPickup: number[] = [];
   /** Per-player AI timers. */
   readonly aiTimer: number[] = [];
+  /** Per-player memory for moving off the ball (runs in behind). */
+  readonly brain: Brain[] = [];
+  /** Where each team's players are heading off the ball (see ai.ts). */
+  readonly plans: [TeamPlan, TeamPlan] = [newPlan(), newPlan()];
+  /** Each team's attacking tactic. A team without a human picks its own and changes it with the score. */
+  readonly tactic: [Tactic, Tactic];
+  private readonly baseTactic: [Tactic, Tactic];
+  private readonly tacticPicked: [boolean, boolean] = [false, false];
   /** How long the goalkeeper has been holding the ball. */
   keeperHold = 0;
   private kickoffWhistle = false;
@@ -162,8 +173,13 @@ export class MatchSim {
         });
         this.noPickup.push(0);
         this.aiTimer.push(0);
+        this.brain.push(newBrain());
       }
     }
+    // The computer plays balanced or direct; possession is for seeing out a lead (see adaptTactics).
+    const pick = (k: number): Tactic => ((cfg.seed + k) % 2 ? 'direct' : 'balanced');
+    this.baseTactic = [pick(0), pick(1)];
+    this.tactic = [pick(0), pick(1)];
     this.setupKickoff(0);
   }
 
@@ -184,6 +200,23 @@ export class MatchSim {
       wasChasing: false,
     });
     this.assignControl(true);
+  }
+
+  /** A player picks their team's attacking tactic (any time, also mid-match). */
+  setTactic(team: Team, t: Tactic): void {
+    this.tactic[team] = t;
+    this.tacticPicked[team] = true;
+    // Re-plan at once, so the change shows straight away.
+    this.plans[team].tick = -1e6;
+  }
+
+  /** A team nobody picked a tactic for chases the game when behind late on, and keeps the ball when ahead. */
+  private adaptTactics(): void {
+    for (const team of [0, 1] as Team[]) {
+      if (this.tacticPicked[team] || this.teamHasHuman(team)) continue;
+      const lead = this.score[team] - this.score[1 - team];
+      this.tactic[team] = lead < 0 && this.clock < 80 ? 'direct' : lead > 0 && this.clock < 60 ? 'possession' : this.baseTactic[team];
+    }
   }
 
   removeHuman(slot: number): void {
@@ -225,6 +258,9 @@ export class MatchSim {
     this.duel = null;
     this.keeperHold = 0;
     this.kickoffWhistle = false;
+    this.plans[0] = newPlan();
+    this.plans[1] = newPlan();
+    for (let i = 0; i < this.brain.length; i++) this.brain[i] = newBrain();
     for (const h of this.humans.values()) {
       h.charge = -1;
       h.passHold = -1;
@@ -465,10 +501,10 @@ export class MatchSim {
     const ty = attackGoalY(p.team);
     const defending = (1 - p.team) as Team;
     // Real time: harder shots arrive sooner and leave less time to react.
-    // More charge, more speed: a tap (power 0.3) about 22 m/s, a full charge about 46 m/s.
-    const speed = 12 + 34 * power;
+    // More charge, more speed: a tap (power 0.3) about 15 m/s, a full charge about 32 m/s.
+    const speed = 8 + 24 * power;
     const dist = Math.hypot(tx - this.ball.x, ty - this.ball.y);
-    const ticks = Math.round(Math.max(10, Math.min(48, (dist / speed) * 60)));
+    const ticks = Math.round(Math.max(12, Math.min(64, (dist / speed) * 60)));
     this.duel = {
       shooter: i,
       team: p.team,
@@ -527,6 +563,7 @@ export class MatchSim {
         }
         // Every tick while a pass is out, so control moves the moment it is about to arrive.
         if (this.tick % 6 === 0 || this.ball.passTarget >= 0) this.assignControl();
+        if (this.tick % 60 === 0) this.adaptTactics();
         this.handleHumanActions(inputs);
         this.movePlayers(inputs, false);
         this.updateBall();
@@ -788,8 +825,9 @@ export class MatchSim {
     const b = this.ball;
     if (b.owner < 0) return;
     const p = this.players[b.owner];
-    b.x = p.x + p.fx * (PLAYER_R + 0.3);
-    b.y = p.y + p.fy * (PLAYER_R + 0.3);
+    // At the carrier's feet, but never through a wall (a player in the corner facing out).
+    b.x = Math.max(-HALF_W + 0.25, Math.min(HALF_W - 0.25, p.x + p.fx * (PLAYER_R + 0.3)));
+    b.y = Math.max(-HALF_L + 0.25, Math.min(HALF_L - 0.25, p.y + p.fy * (PLAYER_R + 0.3)));
     b.vx = p.vx;
     b.vy = p.vy;
     b.z = 0;
@@ -898,6 +936,8 @@ export class MatchSim {
       this.players[best].protect = STEAL_GUARD;
       // Whoever has the ball can always run with it.
       this.players[best].stun = 0;
+      // The computer takes a touch to control it before choosing (unless someone is right on him, see ai.ts).
+      this.aiTimer[best] = FIRST_TOUCH;
       if (this.players[best].role === 0) this.keeperHold = 0;
       this.stickBall();
       this.assignControl(true);
@@ -941,6 +981,7 @@ export class MatchSim {
         this.ball.owner = i;
         this.ball.lastTouch = i;
         p.protect = STEAL_GUARD;
+        this.aiTimer[i] = FIRST_TOUCH;
         // The loser can't touch the ball for a moment (no tackle, no picking up a pass): the winner gets away.
         owner.tackleCd = RETACKLE;
         this.noPickup[o] = RETACKLE;

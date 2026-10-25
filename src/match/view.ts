@@ -2,6 +2,7 @@
 // or decoded from network snapshots and interpolated (clients).
 
 import type { MatchSim } from './sim';
+import { type Tactic, TACTIC_IDS } from './tactics';
 import type { MatchEvent, MatchState, ShotArea, Team } from './types';
 
 export interface PlayerView {
@@ -47,6 +48,8 @@ export interface ViewState {
   ball: { x: number; y: number; z: number; owner: number };
   players: PlayerView[];
   duel: DuelView | null;
+  /** Each team's attacking tactic. */
+  tactics: [Tactic, Tactic];
 }
 
 export function viewFromSim(sim: MatchSim): ViewState {
@@ -88,6 +91,7 @@ export function viewFromSim(sim: MatchSim): ViewState {
             sy: d.sy,
           }
         : null,
+    tactics: [sim.tactic[0], sim.tactic[1]],
   };
 }
 
@@ -96,7 +100,7 @@ export function viewFromSim(sim: MatchSim): ViewState {
 const STATES: MatchState[] = ['kickoff', 'play', 'duel', 'goal', 'ended'];
 const AREAS: ShotArea[] = ['own', 'long', 'danger', 'impossible'];
 const OUTCOMES = [null, 'goal', 'saved'] as const;
-const HEADER = 25;
+const HEADER = 27;
 const PER_PLAYER = 8;
 
 const EVENT_TYPES: MatchEvent['type'][] = ['kick', 'pass', 'steal', 'shot', 'goal', 'save', 'whistle', 'bounce'];
@@ -173,6 +177,8 @@ export function encodeSnapshot(v: ViewState, events: readonly MatchEvent[]): Flo
     d?.window ?? 0,
     d?.sx ?? 0,
     d?.sy ?? 0,
+    TACTIC_IDS.indexOf(v.tactics[0]),
+    TACTIC_IDS.indexOf(v.tactics[1]),
   ]);
   let o = HEADER;
   for (const p of v.players) {
@@ -215,6 +221,7 @@ export function decodeSnapshot(f: Float32Array): { view: ViewState; events: Matc
         }
       : null,
     players: [],
+    tactics: [TACTIC_IDS[f[25]] ?? 'balanced', TACTIC_IDS[f[26]] ?? 'balanced'],
   };
   let o = HEADER;
   for (let i = 0; i < n; i++) {

@@ -3,7 +3,7 @@
 
 import type { Input, Team } from '../match/types';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const enum Msg {
   Hello = 1,
@@ -14,6 +14,8 @@ export const enum Msg {
   Input = 6,
   Snap = 7,
   Bye = 8,
+  /** A player picks their team's attacking tactic (any time, also mid-match). */
+  Tactic = 9,
 }
 
 export interface LobbyPlayer {
@@ -43,6 +45,9 @@ export interface StartMsg {
 }
 export interface ByeMsg {
   reason: string;
+}
+export interface TacticMsg {
+  tactic: string;
 }
 
 const enc = new TextEncoder();

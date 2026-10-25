@@ -67,6 +67,28 @@ test('7v7 vs computer: charge, fireball, save', async ({ browser }) => {
   await page.waitForTimeout(1500);
   await shot(page, '08-match-play', true);
 
+  // My team's attacking shape: I keep the ball in midfield, my teammates find space around me.
+  const holdBall = () =>
+    page.evaluate(() => {
+      const sim = (window as unknown as Hooks).__match.session.sim;
+      const i = sim.humans.get(0)!.controlled;
+      Object.assign(sim.players[i], { x: 0, y: -2, fx: 0, fy: 1, protect: 8 });
+      sim.ball.owner = i;
+    });
+  await holdBall();
+  await page.waitForTimeout(2500);
+  await shot(page, '08a-match-shape-balanced', true);
+  await page.click('#pause');
+  await shot(page, '08b-match-pause');
+  await page.click('#tactic-direct');
+  await page.click('#resume');
+  await holdBall();
+  await page.waitForTimeout(2500);
+  await shot(page, '08c-match-shape-direct', true);
+  await page.keyboard.press('Escape');
+  await page.click('#tactic-balanced');
+  await page.keyboard.press('Escape');
+
   // My player on the ball in front of the box, safe from tackles while charging.
   await page.evaluate(() => {
     const sim = (window as unknown as Hooks).__match.session.sim;

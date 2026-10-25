@@ -4,6 +4,7 @@
 import type { Session } from '../match/session';
 import { SimRunner } from '../match/session';
 import { MatchSim } from '../match/sim';
+import { isTactic, type Tactic } from '../match/tactics';
 import { type Input, type MatchEvent, NO_INPUT, type Team } from '../match/types';
 import { encodeSnapshot, type ViewState, viewFromSim } from '../match/view';
 import {
@@ -19,6 +20,7 @@ import {
   msgType,
   PROTOCOL_VERSION,
   type StartMsg,
+  type TacticMsg,
   type TeamMsg,
 } from './protocol';
 import type { HostTransport } from './transport';
@@ -29,6 +31,10 @@ const SNAP_EVERY = 2; // ticks (60 Hz / 2 = 30 snapshots per second)
 export class LanHost implements Session {
   readonly mySlot = 0;
   readonly canRestart = true;
+  readonly canPause = false;
+  paused = false;
+  /** Each team's tactic as its players last picked it (kept for rematches). */
+  private readonly tactics: [Tactic, Tactic] = ['balanced', 'balanced'];
   readonly names = new Map<number, string>();
   players: LobbyPlayer[] = [];
   started = false;
@@ -107,6 +113,12 @@ export class LanHost implements Session {
         if (slot !== undefined) this.inputs.set(slot, decodeInput(data));
         break;
       }
+      case Msg.Tactic: {
+        const p = this.players.find((x) => x.slot === this.peerSlot.get(peer));
+        const t = decodeJson<TacticMsg>(data).tactic;
+        if (p && isTactic(t)) this.applyTactic(p.team, t);
+        break;
+      }
       default:
         break;
     }
@@ -121,6 +133,15 @@ export class LanHost implements Session {
     // Their player is handed back to the computer.
     this.runner?.sim.removeHuman(slot);
     this.broadcastLobby();
+  }
+
+  setTactic(t: Tactic): void {
+    this.applyTactic(this.myTeam, t);
+  }
+
+  private applyTactic(team: Team, t: Tactic): void {
+    this.tactics[team] = t;
+    this.runner?.sim.setTactic(team, t);
   }
 
   setTeam(slot: number, team: Team): void {
@@ -143,6 +164,7 @@ export class LanHost implements Session {
     this.runner = new SimRunner(() => {
       const sim = new MatchSim({ duration, difficulty: 1, seed: (Math.random() * 2 ** 32) >>> 0 });
       for (const p of roster) if (this.players.some((q) => q.slot === p.slot)) sim.addHuman(p.slot, p.team, p.name);
+      for (const team of [0, 1] as Team[]) if (sim.teamHasHuman(team)) sim.setTactic(team, this.tactics[team]);
       return sim;
     });
     this.transport.broadcast(encodeJson(Msg.Start, { duration, players: roster } satisfies StartMsg));

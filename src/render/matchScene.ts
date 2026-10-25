@@ -5,6 +5,7 @@
 // A camera container then follows the action.
 
 import { Container, Graphics, Text } from 'pixi.js';
+import { SHIRT } from '../match/tactics';
 import {
   BOX_DEPTH,
   BOX_HALF_W,
@@ -44,9 +45,6 @@ function mix(a: number, b: number, t: number): number {
   const ch = (sh: number) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t);
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
-
-/** Shirt numbers by role (keeper first). */
-const NUMBERS = [1, 4, 5, 8, 7, 9, 6];
 
 /** Whether a kit colour is light enough to need dark text on it. */
 function isLight(color: number): boolean {
@@ -528,7 +526,7 @@ export class MatchScene implements Scene {
     const arrow = new Graphics().poly([R + 12, 0, R - 1, -10, R - 1, 10]).fill({ color: 0xffffff, alpha: 0.95 });
     const disc = new Graphics().circle(0, 0, R).fill(color).circle(0, 0, R).stroke({ width: 2.5, color: 0xffffff, alpha: 0.95 });
     const label = new Text({
-      text: String(NUMBERS[role] ?? role),
+      text: String(SHIRT[role] ?? role),
       style: {
         fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
         fontSize: 21,
@@ -548,7 +546,7 @@ export class MatchScene implements Scene {
     while (this.sprites.length < v.players.length) {
       const i = this.sprites.length;
       const p = v.players[i];
-      const s = new PlayerSprite(this.kits[p.team], p.role === 0, NUMBERS[p.role] ?? i);
+      const s = new PlayerSprite(this.kits[p.team], p.role === 0, SHIRT[p.role] ?? i);
       this.sprites.push(s);
       this.playersLayer.addChild(s.root);
     }

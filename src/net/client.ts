@@ -2,6 +2,7 @@
 // past, blending between the two snapshots around that moment for smooth movement.
 
 import type { Session } from '../match/session';
+import type { Tactic } from '../match/tactics';
 import { type Input, type MatchEvent, type Team } from '../match/types';
 import { decodeSnapshot, interpolate, type ViewState } from '../match/view';
 import {
@@ -17,6 +18,7 @@ import {
   msgType,
   PROTOCOL_VERSION,
   type StartMsg,
+  type TacticMsg,
   type WelcomeMsg,
 } from './protocol';
 import type { ClientTransport, GameInfo } from './transport';
@@ -32,6 +34,8 @@ interface Buffered {
 export class LanClient implements Session {
   mySlot = -1;
   readonly canRestart = false;
+  readonly canPause = false;
+  paused = false;
   readonly names = new Map<number, string>();
   players: LobbyPlayer[] = [];
   hostName = '';
@@ -68,6 +72,10 @@ export class LanClient implements Session {
 
   setTeam(team: Team): void {
     this.transport.send(encodeJson(Msg.Team, { team }));
+  }
+
+  setTactic(t: Tactic): void {
+    this.transport.send(encodeJson(Msg.Tactic, { tactic: t } satisfies TacticMsg));
   }
 
   private onData(d: Uint8Array): void {

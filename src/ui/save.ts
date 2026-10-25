@@ -16,9 +16,11 @@ export interface SaveData {
   muted: boolean;
   daily: DailyResult | null;
   playerName: string;
+  /** Attacking tactic last picked in a match (see match/tactics.ts). */
+  tactic: string;
 }
 
-const fresh = (): SaveData => ({ bestWins: 0, titles: 0, runs: 0, muted: false, daily: null, playerName: '' });
+const fresh = (): SaveData => ({ bestWins: 0, titles: 0, runs: 0, muted: false, daily: null, playerName: '', tactic: 'balanced' });
 
 export function load(): SaveData {
   try {
